@@ -1,6 +1,27 @@
 {
-  "additionalDirectories": [
-    "../openzeppelin-monitor",
-    "../oz-multi-tenant"
-  ]
+	"permissions": {
+		"allow": [
+			"mcp__Context7__resolve-library-id",
+			"mcp__Context7__get-library-docs",
+			"mcp__sequential-thinking__sequentialthinking",
+			"WebFetch(domain:docs.openzeppelin.com)",
+			"mcp__brave-search__brave_web_search",
+			"mcp__linear-server__update_issue",
+			"mcp__linear-server__create_issue",
+			"mcp__linear-server__list_issues",
+			"Bash(find:*)",
+			"Bash(grep:*)",
+			"mcp__linear-server__list_teams",
+			"mcp__linear-server__list_cycles",
+			"mcp__linear-server__list_projects",
+			"mcp__linear-server__get_issue",
+			"Bash(gh pr view:*)",
+			"Bash(gh pr checks:*)",
+			"WebFetch(domain:github.com)",
+			"mcp__Context7__get-library-docs"
+		],
+		"deny": [],
+		"ask": []
+	},
+	"additionalDirectories": ["../openzeppelin-monitor", "../oz-multi-tenant"]
 }

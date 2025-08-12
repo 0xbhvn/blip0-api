@@ -73,7 +73,12 @@ class TestSettings(BaseSettings): ...
 class RedisCacheSettings(BaseSettings):
     REDIS_CACHE_HOST: str = config("REDIS_CACHE_HOST", default="localhost")
     REDIS_CACHE_PORT: int = config("REDIS_CACHE_PORT", default=6379)
-    REDIS_CACHE_URL: str = f"redis://{REDIS_CACHE_HOST}:{REDIS_CACHE_PORT}"
+    REDIS_CACHE_PASSWORD: str | None = config("REDIS_CACHE_PASSWORD", default=None)
+    @property
+    def REDIS_CACHE_URL(self) -> str:
+        if self.REDIS_CACHE_PASSWORD:
+            return f"redis://default:{self.REDIS_CACHE_PASSWORD}@{self.REDIS_CACHE_HOST}:{self.REDIS_CACHE_PORT}"
+        return f"redis://{self.REDIS_CACHE_HOST}:{self.REDIS_CACHE_PORT}"
 
 
 class ClientSideCacheSettings(BaseSettings):
@@ -83,12 +88,18 @@ class ClientSideCacheSettings(BaseSettings):
 class RedisQueueSettings(BaseSettings):
     REDIS_QUEUE_HOST: str = config("REDIS_QUEUE_HOST", default="localhost")
     REDIS_QUEUE_PORT: int = config("REDIS_QUEUE_PORT", default=6379)
+    REDIS_QUEUE_PASSWORD: str | None = config("REDIS_QUEUE_PASSWORD", default=None)
 
 
 class RedisRateLimiterSettings(BaseSettings):
     REDIS_RATE_LIMIT_HOST: str = config("REDIS_RATE_LIMIT_HOST", default="localhost")
     REDIS_RATE_LIMIT_PORT: int = config("REDIS_RATE_LIMIT_PORT", default=6379)
-    REDIS_RATE_LIMIT_URL: str = f"redis://{REDIS_RATE_LIMIT_HOST}:{REDIS_RATE_LIMIT_PORT}"
+    REDIS_RATE_LIMIT_PASSWORD: str | None = config("REDIS_RATE_LIMIT_PASSWORD", default=None)
+    @property
+    def REDIS_RATE_LIMIT_URL(self) -> str:
+        if self.REDIS_RATE_LIMIT_PASSWORD:
+            return f"redis://default:{self.REDIS_RATE_LIMIT_PASSWORD}@{self.REDIS_RATE_LIMIT_HOST}:{self.REDIS_RATE_LIMIT_PORT}"
+        return f"redis://{self.REDIS_RATE_LIMIT_HOST}:{self.REDIS_RATE_LIMIT_PORT}"
 
 
 class DefaultRateLimitSettings(BaseSettings):
@@ -127,6 +138,37 @@ class EnvironmentSettings(BaseSettings):
     ENVIRONMENT: EnvironmentOption = config("ENVIRONMENT", default=EnvironmentOption.LOCAL)
 
 
+class CORSSettings(BaseSettings):
+    CORS_ENABLED: bool = config("CORS_ENABLED", default=True)
+    CORS_ORIGINS: list[str] = config(
+        "CORS_ORIGINS",
+        default=[
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8000",
+        ],
+        cast=lambda v: [origin.strip() for origin in v.split(",") if origin.strip()] if isinstance(v, str) else v,
+    )
+    CORS_ALLOW_CREDENTIALS: bool = config("CORS_ALLOW_CREDENTIALS", default=True)
+    CORS_ALLOW_METHODS: list[str] = config(
+        "CORS_ALLOW_METHODS",
+        default=["*"],
+        cast=lambda v: v.split(",") if isinstance(v, str) else v,
+    )
+    CORS_ALLOW_HEADERS: list[str] = config(
+        "CORS_ALLOW_HEADERS",
+        default=["*"],
+        cast=lambda v: v.split(",") if isinstance(v, str) else v,
+    )
+    CORS_EXPOSE_HEADERS: list[str] = config(
+        "CORS_EXPOSE_HEADERS",
+        default=[],
+        cast=lambda v: v.split(",") if isinstance(v, str) else v,
+    )
+    CORS_MAX_AGE: int = config("CORS_MAX_AGE", default=600)
+
+
 class Settings(
     AppSettings,
     PostgresSettings,
@@ -140,6 +182,7 @@ class Settings(
     DefaultRateLimitSettings,
     CRUDAdminSettings,
     EnvironmentSettings,
+    CORSSettings,
 ):
     pass
 
