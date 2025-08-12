@@ -1,0 +1,6 @@
+{
+  "additionalDirectories": [
+    "../openzeppelin-monitor",
+    "../oz-multi-tenant"
+  ]
+}
