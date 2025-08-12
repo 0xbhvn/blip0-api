@@ -83,7 +83,7 @@ async def close_redis_rate_limit_pool() -> None:
 
 # -------------- application --------------
 async def set_threadpool_tokens(number_of_tokens: int = 100) -> None:
-    limiter = anyio.to_thread.current_default_thread_limiter()
+    limiter = anyio.to_thread.current_default_thread_limiter()  # type: ignore[attr-defined]
     limiter.total_tokens = number_of_tokens
 
 
@@ -323,7 +323,7 @@ def create_application(
     # Add middlewares (order matters - last added is outermost/first to execute)
     if isinstance(settings, ClientSideCacheSettings):
         application.add_middleware(
-            ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)
+            ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)  # type: ignore[arg-type]
 
     # Add CORS middleware
     if isinstance(settings, CORSSettings) and settings.CORS_ENABLED:
