@@ -260,7 +260,7 @@ class TriggerExecution(Base):
     execution_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="Type of execution: notification, script, webhook"
+        comment="Type of execution: email, webhook"
     )
     execution_data: Mapped[dict] = mapped_column(
         JSON,
@@ -317,7 +317,7 @@ class TriggerExecution(Base):
     # Table constraints
     __table_args__ = (
         CheckConstraint(
-            "execution_type IN ('notification', 'script', 'webhook')",
+            "execution_type IN ('email', 'webhook')",
             name="check_trigger_execution_type"
         ),
         CheckConstraint(

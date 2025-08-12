@@ -25,8 +25,6 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String)
 
     # Fields with defaults
-    uuid: Mapped[uuid_pkg.UUID] = mapped_column(
-        default_factory=uuid_pkg.uuid4, primary_key=True, unique=True)
     profile_image_url: Mapped[str] = mapped_column(
         String, default="https://profileimageurl.com")
     created_at: Mapped[datetime] = mapped_column(
