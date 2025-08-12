@@ -1,7 +1,8 @@
 import uuid as uuid_pkg
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DECIMAL, JSON, CheckConstraint, ForeignKey, Integer, String
+from sqlalchemy import DECIMAL, JSON, CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.db.database import Base
@@ -50,6 +51,21 @@ class Tenant(Base):
         default=dict,
         server_default="{}",
         comment="Tenant-specific settings and configurations"
+    )
+
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
     )
 
     # Relationships (excluded from init)
@@ -155,6 +171,21 @@ class TenantLimits(Base):
         nullable=False,
         default=0.0,
         server_default="0.0"
+    )
+
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
     )
 
     # Relationship (excluded from init)

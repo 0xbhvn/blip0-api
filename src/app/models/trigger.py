@@ -1,7 +1,7 @@
 import uuid as uuid_pkg
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.db.database import Base
@@ -63,6 +63,21 @@ class Trigger(Base):
     last_validated_at: Mapped[datetime | None] = mapped_column(
         nullable=True,
         default=None
+    )
+
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
     )
 
     # Relationships to specific trigger types (excluded from init)
@@ -168,6 +183,21 @@ class EmailTrigger(Base):
         comment="Array of recipient email addresses"
     )
 
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
+    )
+
     # Relationship (excluded from init)
     trigger: Mapped["Trigger | None"] = relationship(
         "Trigger",
@@ -250,6 +280,21 @@ class WebhookTrigger(Base):
         default=dict,
         server_default="{}",
         comment="Additional HTTP headers to send"
+    )
+
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
     )
 
     # Relationship (excluded from init)

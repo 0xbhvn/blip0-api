@@ -1,7 +1,7 @@
 import uuid as uuid_pkg
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db.database import Base
@@ -122,6 +122,21 @@ class Monitor(Base):
     last_validated_at: Mapped[datetime | None] = mapped_column(
         nullable=True,
         default=None
+    )
+
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
     )
 
     # Table constraints

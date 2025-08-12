@@ -1,5 +1,5 @@
 import uuid as uuid_pkg
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Integer,
     String,
@@ -89,6 +90,21 @@ class BlockState(Base):
         server_default="0"
     )
 
+    # Timestamps for tracking
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()"
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        onupdate=lambda: datetime.now(UTC)
+    )
+
     # Table constraints
     __table_args__ = (
         UniqueConstraint(
@@ -158,6 +174,15 @@ class MissedBlock(Base):
         nullable=False,
         default=False,
         server_default="false"
+    )
+
+    # Timestamp for when block was missed
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        comment="When this block was identified as missed"
     )
 
     # Table constraints
@@ -231,6 +256,15 @@ class MonitorMatch(Base):
         nullable=False,
         default=0,
         server_default="0"
+    )
+
+    # Timestamp for when match occurred
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        comment="When this match was detected"
     )
 
     # Table constraints
@@ -312,6 +346,15 @@ class TriggerExecution(Base):
         nullable=False,
         default=0,
         server_default="0"
+    )
+
+    # Timestamp for when execution was created
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        comment="When this execution was initiated"
     )
 
     # Table constraints
