@@ -69,11 +69,41 @@ uv run python -m src.scripts.create_first_tier
 
 This repository (`blip0-api`) is the Python/FastAPI configuration management layer for the Blip0 blockchain monitoring platform. It works in conjunction with the Rust-based `oz-multi-tenant` monitor runtime to provide a complete multi-tenant monitoring solution.
 
+### Relationship Between oz-multi-tenant and openzeppelin-monitor
+
+**Critical Understanding**: oz-multi-tenant does NOT duplicate openzeppelin-monitor's functionality. Instead, it orchestrates and extends it:
+
+1. **openzeppelin-monitor** (Core Engine):
+   - Handles actual blockchain monitoring (RPC connections, block fetching)
+   - Evaluates filters against blockchain data
+   - Executes triggers when conditions match
+   - Provides the core monitoring infrastructure
+
+2. **oz-multi-tenant** (Orchestration Layer):
+   - Wraps openzeppelin-monitor with database adapters
+   - Adds multi-tenant isolation capabilities
+   - Enables dynamic configuration updates without restarts
+   - Implements database-backed configuration instead of file-based
+
+3. **Architecture Flow**:
+
+   ```text
+   blip0-api (Python) → PostgreSQL/Redis → oz-multi-tenant (Rust) → openzeppelin-monitor (Rust) → Blockchain
+   ```
+
+Evidence from codebase:
+
+- oz-multi-tenant declares openzeppelin-monitor as a Cargo dependency
+- Main binary `oz_monitor_db.rs` explicitly states it "runs the OpenZeppelin Monitor using database-backed repositories"
+- Uses OpenZeppelin's `BlockWatcherService`, `ClientPool`, `FilterService`, etc.
+- Implements OpenZeppelin's trait interfaces (`MonitorRepositoryTrait`, `NetworkRepositoryTrait`)
+- Contains NO blockchain RPC client code - relies entirely on openzeppelin-monitor
+
 ### Architecture Split Strategy
 
 Based on the analysis in `oz-multi-tenant/docs/ARCHITECTURE_SPLIT_ANALYSIS.md`, the system follows a split architecture:
 
-- **Rust Monitor Runtime** (`oz-multi-tenant`): Handles high-performance block processing, real-time monitoring, and filter execution
+- **Rust Monitor Runtime** (`oz-multi-tenant` + `openzeppelin-monitor`): Handles high-performance block processing, real-time monitoring, and filter execution
 - **Python API** (this repository): Manages configuration, tenant management, CRUD operations, and administrative interfaces
 
 ### Phase 2 Development Goals
@@ -191,11 +221,12 @@ tenant:{tenant_id}:monitor:{id}      → Denormalized monitor with triggers
 
 ### Data Flow
 
-1. User creates/updates configuration via Python API
+1. User creates/updates configuration via Python API (blip0-api)
 2. API writes to **PostgreSQL** (primary persistent storage, source of truth)
 3. API immediately writes-through to **Redis** (cache layer, denormalized for performance)
-4. Rust monitor reads from Redis every 30 seconds (never directly from PostgreSQL)
-5. Rust processes blocks using cached configurations
+4. oz-multi-tenant reads from Redis every 30 seconds (never directly from PostgreSQL)
+5. oz-multi-tenant provides configurations to openzeppelin-monitor
+6. openzeppelin-monitor processes blocks using the provided configurations
 
 ### Storage Architecture
 
@@ -238,3 +269,31 @@ tenant:{tenant_id}:monitor:{id}      → Denormalized monitor with triggers
 2. **Advanced Filtering**: Complex filter composition
 3. **Analytics Dashboard**: Monitor performance metrics
 4. **API Rate Limiting**: Per-tenant usage controls
+
+## Component Responsibilities Summary
+
+### blip0-api (This Repository)
+
+- Configuration management API (CRUD operations)
+- PostgreSQL database management
+- Redis cache synchronization
+- Tenant management
+- Authentication and authorization
+- Admin dashboard
+
+### oz-multi-tenant
+
+- Database adapters for openzeppelin-monitor
+- Multi-tenant isolation
+- Dynamic configuration refresh from Redis
+- Runtime configuration updates
+- Orchestrates openzeppelin-monitor instances
+
+### openzeppelin-monitor
+
+- Core blockchain monitoring engine
+- RPC client connections
+- Block fetching and processing
+- Filter evaluation
+- Trigger execution
+- Actual blockchain interaction
