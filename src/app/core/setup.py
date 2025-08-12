@@ -57,7 +57,7 @@ async def close_redis_cache_pool() -> None:
 
 # -------------- queue --------------
 async def create_redis_queue_pool() -> None:
-    redis_settings_kwargs = {
+    redis_settings_kwargs: dict[str, Any] = {
         "host": settings.REDIS_QUEUE_HOST,
         "port": settings.REDIS_QUEUE_PORT,
     }
@@ -96,6 +96,7 @@ def lifespan_factory(
         | RedisQueueSettings
         | RedisRateLimiterSettings
         | EnvironmentSettings
+        | CORSSettings
     ),
     create_tables_on_start: bool = True,
 ) -> Callable[[FastAPI], _AsyncGeneratorContextManager[Any]]:
@@ -162,8 +163,14 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 # -------------- exception handlers --------------
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle validation errors with detailed error information."""
+    if not isinstance(exc, RequestValidationError):
+        # Should not happen but handle gracefully
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Unexpected error"},
+        )
     request_id = getattr(request.state, "request_id", None)
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -175,8 +182,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle HTTP exceptions with consistent error format."""
+    if not isinstance(exc, StarletteHTTPException):
+        # Should not happen but handle gracefully
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Unexpected error"},
+        )
     request_id = getattr(request.state, "request_id", None)
     return JSONResponse(
         status_code=exc.status_code,
@@ -217,7 +230,8 @@ def create_application(
         | CORSSettings
     ),
     create_tables_on_start: bool = True,
-    lifespan: Callable[[FastAPI], _AsyncGeneratorContextManager[Any]] | None = None,
+    lifespan: Callable[[FastAPI],
+                       _AsyncGeneratorContextManager[Any]] | None = None,
     **kwargs: Any,
 ) -> FastAPI:
     """Creates and configures a FastAPI application based on the provided settings.
@@ -272,11 +286,13 @@ def create_application(
         kwargs.update(to_update)
 
     if isinstance(settings, EnvironmentSettings):
-        kwargs.update({"docs_url": None, "redoc_url": None, "openapi_url": None})
+        kwargs.update(
+            {"docs_url": None, "redoc_url": None, "openapi_url": None})
 
     # Use custom lifespan if provided, otherwise use default factory
     if lifespan is None:
-        lifespan = lifespan_factory(settings, create_tables_on_start=create_tables_on_start)
+        lifespan = lifespan_factory(
+            settings, create_tables_on_start=create_tables_on_start)
 
     application = FastAPI(lifespan=lifespan, **kwargs)
 
@@ -284,12 +300,13 @@ def create_application(
     @application.get("/health", tags=["Health"], summary="Health Check")
     async def health_check(request: Request):
         """Check the health status of the application."""
+        from .config import settings as config_settings
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={
                 "status": "healthy",
-                "service": settings.APP_NAME,
-                "version": settings.APP_VERSION,
+                "service": config_settings.APP_NAME,
+                "version": config_settings.APP_VERSION,
                 "request_id": getattr(request.state, "request_id", None),
             },
         )
@@ -297,13 +314,16 @@ def create_application(
     application.include_router(router)
 
     # Register exception handlers
-    application.add_exception_handler(RequestValidationError, validation_exception_handler)
-    application.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    application.add_exception_handler(
+        RequestValidationError, validation_exception_handler)
+    application.add_exception_handler(
+        StarletteHTTPException, http_exception_handler)
     application.add_exception_handler(Exception, general_exception_handler)
 
     # Add middlewares (order matters - last added is outermost/first to execute)
     if isinstance(settings, ClientSideCacheSettings):
-        application.add_middleware(ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)
+        application.add_middleware(
+            ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)
 
     # Add CORS middleware
     if isinstance(settings, CORSSettings) and settings.CORS_ENABLED:
@@ -324,7 +344,8 @@ def create_application(
         if settings.ENVIRONMENT != EnvironmentOption.PRODUCTION:
             docs_router = APIRouter()
             if settings.ENVIRONMENT != EnvironmentOption.LOCAL:
-                docs_router = APIRouter(dependencies=[Depends(get_current_superuser)])
+                docs_router = APIRouter(
+                    dependencies=[Depends(get_current_superuser)])
 
             @docs_router.get("/docs", include_in_schema=False)
             async def get_swagger_documentation() -> fastapi.responses.HTMLResponse:
@@ -336,7 +357,8 @@ def create_application(
 
             @docs_router.get("/openapi.json", include_in_schema=False)
             async def openapi() -> dict[str, Any]:
-                out: dict = get_openapi(title=application.title, version=application.version, routes=application.routes)
+                out: dict = get_openapi(
+                    title=application.title, version=application.version, routes=application.routes)
                 return out
 
             application.include_router(docs_router)
