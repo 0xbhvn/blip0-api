@@ -1,7 +1,7 @@
+import uuid
 from collections.abc import AsyncGenerator, Callable
 from contextlib import _AsyncGeneratorContextManager, asynccontextmanager
 from typing import Any
-import uuid
 
 import anyio
 import fastapi
@@ -149,13 +149,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID")
         if not request_id:
             request_id = str(uuid.uuid4())
-        
+
         # Store request ID in request state
         request.state.request_id = request_id
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Add request ID to response headers
         response.headers["X-Request-ID"] = request_id
         return response
@@ -193,7 +193,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     # Log the full exception for debugging
     import traceback
     traceback.print_exc()
-    
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -279,7 +279,7 @@ def create_application(
         lifespan = lifespan_factory(settings, create_tables_on_start=create_tables_on_start)
 
     application = FastAPI(lifespan=lifespan, **kwargs)
-    
+
     # Add health check endpoint before including main router
     @application.get("/health", tags=["Health"], summary="Health Check")
     async def health_check(request: Request):
@@ -293,18 +293,18 @@ def create_application(
                 "request_id": getattr(request.state, "request_id", None),
             },
         )
-    
+
     application.include_router(router)
-    
+
     # Register exception handlers
     application.add_exception_handler(RequestValidationError, validation_exception_handler)
     application.add_exception_handler(StarletteHTTPException, http_exception_handler)
     application.add_exception_handler(Exception, general_exception_handler)
-    
+
     # Add middlewares (order matters - last added is outermost/first to execute)
     if isinstance(settings, ClientSideCacheSettings):
         application.add_middleware(ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)
-    
+
     # Add CORS middleware
     if isinstance(settings, CORSSettings) and settings.CORS_ENABLED:
         application.add_middleware(
@@ -316,7 +316,7 @@ def create_application(
             expose_headers=settings.CORS_EXPOSE_HEADERS,
             max_age=settings.CORS_MAX_AGE,
         )
-    
+
     # Add Request ID middleware (should be one of the first to execute)
     application.add_middleware(RequestIDMiddleware)
 

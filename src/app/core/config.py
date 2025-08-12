@@ -151,9 +151,21 @@ class CORSSettings(BaseSettings):
         cast=lambda v: [origin.strip() for origin in v.split(",") if origin.strip()] if isinstance(v, str) else v,
     )
     CORS_ALLOW_CREDENTIALS: bool = config("CORS_ALLOW_CREDENTIALS", default=True)
-    CORS_ALLOW_METHODS: list[str] = config("CORS_ALLOW_METHODS", default=["*"], cast=lambda v: v.split(",") if isinstance(v, str) else v)
-    CORS_ALLOW_HEADERS: list[str] = config("CORS_ALLOW_HEADERS", default=["*"], cast=lambda v: v.split(",") if isinstance(v, str) else v)
-    CORS_EXPOSE_HEADERS: list[str] = config("CORS_EXPOSE_HEADERS", default=[], cast=lambda v: v.split(",") if isinstance(v, str) else v)
+    CORS_ALLOW_METHODS: list[str] = config(
+        "CORS_ALLOW_METHODS",
+        default=["*"],
+        cast=lambda v: v.split(",") if isinstance(v, str) else v,
+    )
+    CORS_ALLOW_HEADERS: list[str] = config(
+        "CORS_ALLOW_HEADERS",
+        default=["*"],
+        cast=lambda v: v.split(",") if isinstance(v, str) else v,
+    )
+    CORS_EXPOSE_HEADERS: list[str] = config(
+        "CORS_EXPOSE_HEADERS",
+        default=[],
+        cast=lambda v: v.split(",") if isinstance(v, str) else v,
+    )
     CORS_MAX_AGE: int = config("CORS_MAX_AGE", default=600)
 
 
