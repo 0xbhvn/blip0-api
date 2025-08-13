@@ -1,7 +1,7 @@
 import uuid as uuid_pkg
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db.database import Base
@@ -147,6 +147,12 @@ class Monitor(Base):
             deferrable=True,
             initially="DEFERRED"
         ),
+        # Composite indexes for common query patterns
+        Index("idx_monitor_tenant_active", "tenant_id", "active"),
+        Index("idx_monitor_tenant_paused", "tenant_id", "paused"),
+        Index("idx_monitor_tenant_slug", "tenant_id", "slug"),
+        Index("idx_monitor_tenant_active_paused",
+              "tenant_id", "active", "paused"),
         {"comment": "Normalized monitor configurations with all relationships stored as JSONB fields"},
     )
 

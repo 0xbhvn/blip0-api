@@ -1,7 +1,18 @@
 import uuid as uuid_pkg
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.db.database import Base
@@ -108,6 +119,12 @@ class Trigger(Base):
             "trigger_type IN ('email', 'webhook')",
             name="check_trigger_type"
         ),
+        # Composite indexes for common query patterns
+        Index("idx_trigger_tenant_active", "tenant_id", "active"),
+        Index("idx_trigger_tenant_type", "tenant_id", "trigger_type"),
+        Index("idx_trigger_tenant_slug", "tenant_id", "slug"),
+        Index("idx_trigger_tenant_type_active",
+              "tenant_id", "trigger_type", "active"),
         {"comment": "Normalized trigger configurations from configurations table"},
     )
 

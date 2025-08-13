@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -117,6 +118,9 @@ class BlockState(Base):
             "processing_status IN ('idle', 'processing', 'error', 'paused')",
             name="check_block_state_status"
         ),
+        # Composite indexes for common query patterns
+        Index("idx_blockstate_tenant_network", "tenant_id", "network_id"),
+        Index("idx_blockstate_tenant_status", "tenant_id", "processing_status"),
         {"comment": "Block processing state per network per tenant"},
     )
 
@@ -191,6 +195,9 @@ class MissedBlock(Base):
             "tenant_id", "network_id", "block_number",
             name="unique_missed_block"
         ),
+        # Composite indexes for common query patterns
+        Index("idx_missedblock_tenant_network_processed", "tenant_id", "network_id", "processed"),
+        Index("idx_missedblock_tenant_processed", "tenant_id", "processed"),
         {"comment": "Missed blocks tracking for retry logic"},
     )
 
@@ -269,6 +276,10 @@ class MonitorMatch(Base):
 
     # Table constraints
     __table_args__ = (
+        # Composite indexes for common query patterns
+        Index("idx_monitormatch_tenant_monitor", "tenant_id", "monitor_id"),
+        Index("idx_monitormatch_tenant_network_block", "tenant_id", "network_id", "block_number"),
+        Index("idx_monitormatch_tenant_created", "tenant_id", "created_at"),
         {"comment": "Monitor execution results when conditions match"},
     )
 
@@ -367,5 +378,10 @@ class TriggerExecution(Base):
             "status IN ('pending', 'running', 'success', 'failed', 'timeout')",
             name="check_trigger_execution_status"
         ),
+        # Composite indexes for common query patterns
+        Index("idx_triggerexec_tenant_trigger_status", "tenant_id", "trigger_id", "status"),
+        Index("idx_triggerexec_tenant_status", "tenant_id", "status"),
+        Index("idx_triggerexec_tenant_created", "tenant_id", "created_at"),
+        Index("idx_triggerexec_match_id", "monitor_match_id"),
         {"comment": "Trigger execution history with status tracking"},
     )

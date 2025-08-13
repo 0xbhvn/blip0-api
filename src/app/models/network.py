@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -159,6 +160,9 @@ class Network(Base):
             "network_type IN ('EVM', 'Stellar')",
             name="check_network_type"
         ),
-        # Index for active networks per tenant
+        # Composite indexes for common query patterns
+        Index("idx_network_tenant_active", "tenant_id", "active"),
+        Index("idx_network_tenant_type", "tenant_id", "network_type"),
+        Index("idx_network_tenant_slug", "tenant_id", "slug"),
         {"comment": "Normalized network configurations from configurations table with RPC URLs as JSONB"},
     )

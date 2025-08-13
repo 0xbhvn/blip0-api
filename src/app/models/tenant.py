@@ -2,7 +2,7 @@ import uuid as uuid_pkg
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DECIMAL, JSON, CheckConstraint, DateTime, ForeignKey, Integer, String
+from sqlalchemy import DECIMAL, JSON, CheckConstraint, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..core.db.database import Base
@@ -93,6 +93,8 @@ class Tenant(Base):
             "status IN ('active', 'suspended', 'deleted')",
             name="check_tenant_status"
         ),
+        Index("idx_tenant_status_plan", "status", "plan"),
+        Index("idx_tenant_status_created", "status", "created_at"),
     )
 
 
