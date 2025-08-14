@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ..core.logger import logging
 from ..core.redis_client import redis_client
@@ -112,10 +113,12 @@ class CacheService:
                 channel = CHANNELS["platform_update"]
             elif tenant_id:
                 # Use tenant-specific channel for tenant resources
-                channel = CHANNELS["tenant_pattern"].format(tenant_id=tenant_id)
+                channel = CHANNELS["tenant_pattern"].format(
+                    tenant_id=tenant_id)
             else:
                 # Fallback to resource-specific channel
-                channel = CHANNELS.get(f"{resource_type.value}_update", CHANNELS["config_update"])
+                channel = CHANNELS.get(
+                    f"{resource_type.value}_update", CHANNELS["config_update"])
 
             # Publish the event
             num_subscribers = await redis_client.publish(channel, event)
@@ -149,40 +152,36 @@ class CacheService:
             tenant_id = str(monitor.tenant_id)
             monitor_id = str(monitor.id)
 
-            # Fetch associated triggers if trigger slugs are present
+            # Fetch associated triggers with eager loading if trigger slugs are present
             triggers_data = []
             if monitor.triggers:
-                for trigger_slug in monitor.triggers:
-                    # Fetch trigger by slug and tenant
-                    stmt = select(Trigger).where(
-                        Trigger.tenant_id == monitor.tenant_id,
-                        Trigger.slug == trigger_slug
+                # Fetch all triggers with their configs in a single query using eager loading
+                stmt = (
+                    select(Trigger)
+                    .options(
+                        selectinload(Trigger.email_config),
+                        selectinload(Trigger.webhook_config)
                     )
-                    trigger = await db.scalar(stmt)
+                    .where(
+                        Trigger.tenant_id == monitor.tenant_id,
+                        Trigger.slug.in_(monitor.triggers)
+                    )
+                )
+                result = await db.scalars(stmt)
+                triggers = result.all()
 
-                    if trigger:
-                        trigger_dict = cls._denormalize_trigger(trigger)
+                for trigger in triggers:
+                    trigger_dict = cls._denormalize_trigger(trigger)
 
-                        # Fetch type-specific config
-                        if trigger.trigger_type == "email":
-                            email_stmt = select(EmailTrigger).where(
-                                EmailTrigger.trigger_id == trigger.id
-                            )
-                            email_config = await db.scalar(email_stmt)
-                            if email_config:
-                                trigger_dict["email_config"] = cls._serialize_email_trigger(
-                                    email_config)
+                    # Add type-specific config (already loaded via eager loading)
+                    if trigger.trigger_type == "email" and trigger.email_config:
+                        trigger_dict["email_config"] = cls._serialize_email_trigger(
+                            trigger.email_config)
+                    elif trigger.trigger_type == "webhook" and trigger.webhook_config:
+                        trigger_dict["webhook_config"] = cls._serialize_webhook_trigger(
+                            trigger.webhook_config)
 
-                        elif trigger.trigger_type == "webhook":
-                            webhook_stmt = select(WebhookTrigger).where(
-                                WebhookTrigger.trigger_id == trigger.id
-                            )
-                            webhook_config = await db.scalar(webhook_stmt)
-                            if webhook_config:
-                                trigger_dict["webhook_config"] = cls._serialize_webhook_trigger(
-                                    webhook_config)
-
-                        triggers_data.append(trigger_dict)
+                    triggers_data.append(trigger_dict)
 
             # Denormalize monitor data
             monitor_data = {

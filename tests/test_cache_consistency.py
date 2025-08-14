@@ -200,8 +200,14 @@ class TestMonitorCaching(TestCacheServiceFixtures):
         self, mock_redis, mock_db, sample_monitor, sample_trigger, sample_email_trigger
     ):
         """Test successful monitor caching with denormalized trigger data."""
-        # Setup database mocks to return trigger data
-        mock_db.scalar.side_effect = [sample_trigger, sample_email_trigger]
+        # Setup database mocks to return trigger data with eager loading
+        # Create a mock result that has an all() method returning triggers
+        mock_scalars_result = Mock()
+        mock_scalars_result.all.return_value = [sample_trigger]
+        mock_db.scalars.return_value = mock_scalars_result
+
+        # Setup trigger with email_config relationship
+        sample_trigger.email_config = sample_email_trigger
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.cache_monitor(mock_db, sample_monitor)
@@ -290,7 +296,12 @@ class TestMonitorCaching(TestCacheServiceFixtures):
     ):
         """Test monitor caching with webhook trigger type."""
         sample_trigger.trigger_type = "webhook"
-        mock_db.scalar.side_effect = [sample_trigger, sample_webhook_trigger]
+        sample_trigger.webhook_config = sample_webhook_trigger
+
+        # Setup mock scalars result
+        mock_scalars_result = Mock()
+        mock_scalars_result.all.return_value = [sample_trigger]
+        mock_db.scalars.return_value = mock_scalars_result
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.cache_monitor(mock_db, sample_monitor)
@@ -1022,8 +1033,13 @@ class TestCacheConsistencyChecks(TestCacheServiceFixtures):
         self, mock_redis, mock_db, sample_monitor, sample_trigger, sample_email_trigger
     ):
         """Test that denormalized data maintains referential integrity."""
-        # Setup trigger relationship
-        mock_db.scalar.side_effect = [sample_trigger, sample_email_trigger]
+        # Setup trigger relationship with eager loading
+        sample_trigger.email_config = sample_email_trigger
+
+        # Setup mock scalars result
+        mock_scalars_result = Mock()
+        mock_scalars_result.all.return_value = [sample_trigger]
+        mock_db.scalars.return_value = mock_scalars_result
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             await CacheService.cache_monitor(mock_db, sample_monitor)

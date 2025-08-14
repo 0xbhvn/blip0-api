@@ -46,6 +46,9 @@ class RedisClient:
                 "decode_responses": False,  # We'll handle decoding ourselves
                 "max_connections": 50,
                 "socket_keepalive": True,
+                "socket_connect_timeout": 5.0,  # 5 seconds connection timeout
+                "socket_timeout": 5.0,  # 5 seconds socket timeout
+                "retry_on_timeout": True,  # Retry on timeout
             }
 
             # Only add socket_keepalive_options on Linux
@@ -107,6 +110,9 @@ class RedisClient:
             logger.error(f"Redis health check failed: {e}")
             return False
 
+    # Maximum size for cached values (10MB)
+    MAX_CACHE_VALUE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+
     # Core operations
     @classmethod
     async def get(cls, key: str) -> Optional[Any]:
@@ -122,11 +128,21 @@ class RedisClient:
             client = cls.get_client()
             value = await client.get(key)
             if value:
+                # Validate size before processing
+                if len(value) > cls.MAX_CACHE_VALUE_SIZE:
+                    logger.warning(
+                        f"Cached value for key {key} exceeds size limit ({len(value)} bytes)")
+                    return None
+
                 try:
-                    return json.loads(value.decode('utf-8'))
+                    decoded = value.decode('utf-8')
+                    return json.loads(decoded)
                 except json.JSONDecodeError:
                     # Return raw value if not JSON
                     return value.decode('utf-8')
+                except UnicodeDecodeError:
+                    logger.error(f"Failed to decode value for key {key}")
+                    return None
             return None
         except RedisError as e:
             logger.error(f"Redis GET error for key {key}: {e}")
@@ -165,6 +181,14 @@ class RedisClient:
             # Convert to bytes
             if isinstance(value, str):
                 value = value.encode('utf-8')
+
+            # Validate size before storing
+            if len(value) > cls.MAX_CACHE_VALUE_SIZE:
+                logger.error(
+                    f"Value for key {key} exceeds size limit "
+                    f"({len(value)} bytes > {cls.MAX_CACHE_VALUE_SIZE} bytes)"
+                )
+                return False
 
             result = await client.set(key, value, ex=expiration, nx=nx, xx=xx)
             return bool(result)
@@ -232,7 +256,8 @@ class RedisClient:
                     value = value.encode('utf-8')
                 encoded_values.append(value)
             # redis-py has incomplete async type hints
-            result = await client.lpush(key, *encoded_values)  # type: ignore[misc]
+            # type: ignore[misc]
+            result = await client.lpush(key, *encoded_values)
             return int(result) if result else 0
         except RedisError as e:
             logger.error(f"Redis LPUSH error for key {key}: {e}")
@@ -253,7 +278,8 @@ class RedisClient:
         try:
             client = cls.get_client()
             # redis-py has incomplete async type hints
-            values = await client.lrange(key, start, stop)  # type: ignore[misc]
+            # type: ignore[misc]
+            values = await client.lrange(key, start, stop)
             result = []
             for value in values:
                 try:
@@ -288,7 +314,8 @@ class RedisClient:
                     member = member.encode('utf-8')
                 encoded_members.append(member)
             # redis-py has incomplete async type hints
-            result = await client.sadd(key, *encoded_members)  # type: ignore[misc]
+            # type: ignore[misc]
+            result = await client.sadd(key, *encoded_members)
             return int(result) if result else 0
         except RedisError as e:
             logger.error(f"Redis SADD error for key {key}: {e}")
@@ -342,7 +369,8 @@ class RedisClient:
                     member = member.encode('utf-8')
                 encoded_members.append(member)
             # redis-py has incomplete async type hints
-            result = await client.srem(key, *encoded_members)  # type: ignore[misc]
+            # type: ignore[misc]
+            result = await client.srem(key, *encoded_members)
             return int(result) if result else 0
         except RedisError as e:
             logger.error(f"Redis SREM error for key {key}: {e}")
@@ -369,11 +397,12 @@ class RedisClient:
 
     # Pattern operations
     @classmethod
-    async def delete_pattern(cls, pattern: str) -> int:
-        """Delete all keys matching a pattern.
+    async def delete_pattern(cls, pattern: str, max_keys: int = 10000) -> int:
+        """Delete all keys matching a pattern with limit.
 
         Args:
             pattern: Pattern to match (e.g., "tenant:*:monitor:*")
+            max_keys: Maximum number of keys to delete (default: 10000)
 
         Returns:
             Number of keys deleted
@@ -382,11 +411,21 @@ class RedisClient:
             client = cls.get_client()
             cursor = 0
             deleted_count = 0
+            scanned_count = 0
 
             while True:
                 cursor, keys = await client.scan(cursor, match=pattern, count=100)
                 if keys:
+                    # Check if we've hit the limit
+                    if scanned_count + len(keys) > max_keys:
+                        remaining = max_keys - scanned_count
+                        if remaining > 0:
+                            deleted_count += await client.delete(*keys[:remaining])
+                        logger.warning(
+                            f"Delete limit reached ({max_keys} keys) for pattern {pattern}")
+                        break
                     deleted_count += await client.delete(*keys)
+                    scanned_count += len(keys)
                 if cursor == 0:
                     break
 
@@ -415,6 +454,13 @@ class RedisClient:
                 cursor, keys = await client.scan(cursor, match=pattern, count=100)
                 all_keys.extend(
                     [k.decode('utf-8') if isinstance(k, bytes) else k for k in keys])
+
+                # Stop if we've reached the limit (default 10000)
+                if len(all_keys) >= 10000:
+                    logger.warning(
+                        f"Key scan limit reached (10000 keys) for pattern {pattern}")
+                    return all_keys[:10000]
+
                 if cursor == 0:
                     break
 
