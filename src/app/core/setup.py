@@ -35,6 +35,7 @@ from .config import (
 )
 from .db.database import Base
 from .db.database import async_engine as engine
+from .redis_client import redis_client
 from .utils import cache, queue
 
 
@@ -46,13 +47,21 @@ async def create_tables() -> None:
 
 # -------------- cache --------------
 async def create_redis_cache_pool() -> None:
+    # Initialize new centralized Redis client
+    await redis_client.initialize(settings.REDIS_CACHE_URL)
+
+    # Keep backward compatibility with old cache module
     cache.pool = redis.ConnectionPool.from_url(settings.REDIS_CACHE_URL)
-    cache.client = redis.Redis.from_pool(cache.pool)  # type: ignore
+    cache.client = redis.Redis(connection_pool=cache.pool)
 
 
 async def close_redis_cache_pool() -> None:
+    # Close new centralized Redis client
+    await redis_client.close()
+
+    # Close old cache client for backward compatibility
     if cache.client is not None:
-        await cache.client.aclose()  # type: ignore
+        await cache.client.close()
 
 
 # -------------- queue --------------
@@ -68,22 +77,22 @@ async def create_redis_queue_pool() -> None:
 
 async def close_redis_queue_pool() -> None:
     if queue.pool is not None:
-        await queue.pool.aclose()  # type: ignore
+        await queue.pool.close()  # type: ignore[attr-defined]
 
 
 # -------------- rate limit --------------
 async def create_redis_rate_limit_pool() -> None:
-    rate_limiter.initialize(settings.REDIS_RATE_LIMIT_URL)  # type: ignore
+    rate_limiter.initialize(settings.REDIS_RATE_LIMIT_URL)
 
 
 async def close_redis_rate_limit_pool() -> None:
     if rate_limiter.client is not None:
-        await rate_limiter.client.aclose()  # type: ignore
+        await rate_limiter.client.close()  # type: ignore[attr-defined]
 
 
 # -------------- application --------------
 async def set_threadpool_tokens(number_of_tokens: int = 100) -> None:
-    limiter = anyio.to_thread.current_default_thread_limiter()  # type: ignore[attr-defined]
+    limiter = anyio.to_thread.current_default_thread_limiter()  # type: ignore
     limiter.total_tokens = number_of_tokens
 
 
@@ -323,7 +332,7 @@ def create_application(
     # Add middlewares (order matters - last added is outermost/first to execute)
     if isinstance(settings, ClientSideCacheSettings):
         application.add_middleware(
-            ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)  # type: ignore[arg-type]
+            ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)  # type: ignore
 
     # Add CORS middleware
     if isinstance(settings, CORSSettings) and settings.CORS_ENABLED:
