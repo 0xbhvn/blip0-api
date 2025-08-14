@@ -52,7 +52,7 @@ async def create_redis_cache_pool() -> None:
 
     # Keep backward compatibility with old cache module
     cache.pool = redis.ConnectionPool.from_url(settings.REDIS_CACHE_URL)
-    cache.client = redis.Redis.from_pool(cache.pool)
+    cache.client = redis.Redis(connection_pool=cache.pool)
 
 
 async def close_redis_cache_pool() -> None:
@@ -61,7 +61,7 @@ async def close_redis_cache_pool() -> None:
 
     # Close old cache client for backward compatibility
     if cache.client is not None:
-        await cache.client.aclose()
+        await cache.client.close()
 
 
 # -------------- queue --------------
@@ -77,7 +77,7 @@ async def create_redis_queue_pool() -> None:
 
 async def close_redis_queue_pool() -> None:
     if queue.pool is not None:
-        await queue.pool.aclose()
+        await queue.pool.close()  # type: ignore[attr-defined]
 
 
 # -------------- rate limit --------------
@@ -87,7 +87,7 @@ async def create_redis_rate_limit_pool() -> None:
 
 async def close_redis_rate_limit_pool() -> None:
     if rate_limiter.client is not None:
-        await rate_limiter.client.aclose()
+        await rate_limiter.client.close()  # type: ignore[attr-defined]
 
 
 # -------------- application --------------
