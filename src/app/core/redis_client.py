@@ -39,17 +39,24 @@ class RedisClient:
         """
         instance = cls()
         if instance._pool is None:
-            instance._pool = ConnectionPool.from_url(
-                redis_url,
-                decode_responses=False,  # We'll handle decoding ourselves
-                max_connections=50,
-                socket_keepalive=True,
-                socket_keepalive_options={
+            # Create connection pool without socket_keepalive_options on macOS
+            # as the numeric TCP options cause issues
+            import platform
+            pool_kwargs = {
+                "decode_responses": False,  # We'll handle decoding ourselves
+                "max_connections": 50,
+                "socket_keepalive": True,
+            }
+
+            # Only add socket_keepalive_options on Linux
+            if platform.system() == "Linux":
+                pool_kwargs["socket_keepalive_options"] = {  # type: ignore[assignment]
                     1: 3,  # TCP_KEEPIDLE
                     2: 3,  # TCP_KEEPINTVL
                     3: 3,  # TCP_KEEPCNT
                 }
-            )
+
+            instance._pool = ConnectionPool.from_url(redis_url, **pool_kwargs)
             instance._client = Redis(connection_pool=instance._pool)
             instance._pubsub_client = Redis(connection_pool=instance._pool)
             logger.info(f"Redis client initialized with URL: {redis_url}")

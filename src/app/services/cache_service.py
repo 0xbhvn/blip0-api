@@ -5,7 +5,8 @@ Optimized for oz-multi-tenant Rust monitor consumption.
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from enum import Enum
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +34,28 @@ CHANNELS = {
     "monitor_update": "blip0:monitor:update",
     "network_update": "blip0:network:update",
     "trigger_update": "blip0:trigger:update",
+    # Platform-wide channels
+    "platform_update": "blip0:platform:update",
+    # Tenant-specific channel pattern (use with tenant_id)
+    "tenant_pattern": "blip0:tenant:{tenant_id}:update",
 }
+
+
+class CacheEventType(str, Enum):
+    """Cache event types for pub/sub notifications."""
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    INVALIDATE = "invalidate"
+
+
+class CacheResourceType(str, Enum):
+    """Resource types for cache events."""
+    MONITOR = "monitor"
+    NETWORK = "network"
+    TRIGGER = "trigger"
+    TENANT = "tenant"
+    PLATFORM = "platform"
 
 
 class CacheService:
@@ -48,6 +70,67 @@ class CacheService:
     def _serialize_uuid(uid: Optional[uuid.UUID]) -> Optional[str]:
         """Serialize UUID to string."""
         return str(uid) if uid else None
+
+    @classmethod
+    async def _publish_cache_event(
+        cls,
+        event_type: CacheEventType,
+        resource_type: CacheResourceType,
+        resource_id: str,
+        tenant_id: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None
+    ) -> bool:
+        """Publish a cache event to the appropriate channel.
+
+        Args:
+            event_type: Type of cache event (create, update, delete, invalidate)
+            resource_type: Type of resource affected
+            resource_id: UUID of the resource
+            tenant_id: UUID of the tenant (optional for platform resources)
+            metadata: Additional event metadata
+
+        Returns:
+            True if published successfully
+        """
+        try:
+            # Build event payload
+            event = {
+                "event_type": event_type.value,
+                "resource_type": resource_type.value,
+                "resource_id": resource_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            if tenant_id:
+                event["tenant_id"] = tenant_id
+
+            if metadata:
+                event["metadata"] = metadata  # type: ignore[assignment]
+
+            # Determine channel based on resource type
+            if resource_type == CacheResourceType.PLATFORM:
+                channel = CHANNELS["platform_update"]
+            elif tenant_id:
+                # Use tenant-specific channel for tenant resources
+                channel = CHANNELS["tenant_pattern"].format(tenant_id=tenant_id)
+            else:
+                # Fallback to resource-specific channel
+                channel = CHANNELS.get(f"{resource_type.value}_update", CHANNELS["config_update"])
+
+            # Publish the event
+            num_subscribers = await redis_client.publish(channel, event)
+
+            if num_subscribers > 0:
+                logger.debug(
+                    f"Published {event_type.value} event for {resource_type.value} "
+                    f"{resource_id} to channel {channel} ({num_subscribers} subscribers)"
+                )
+
+            return num_subscribers > 0
+
+        except Exception as e:
+            logger.error(f"Error publishing cache event: {e}")
+            return False
 
     # ============== Monitor Caching ==============
 
@@ -82,19 +165,19 @@ class CacheService:
 
                         # Fetch type-specific config
                         if trigger.trigger_type == "email":
-                            stmt = select(EmailTrigger).where(
+                            email_stmt = select(EmailTrigger).where(
                                 EmailTrigger.trigger_id == trigger.id
                             )
-                            email_config = await db.scalar(stmt)
+                            email_config = await db.scalar(email_stmt)
                             if email_config:
                                 trigger_dict["email_config"] = cls._serialize_email_trigger(
                                     email_config)
 
                         elif trigger.trigger_type == "webhook":
-                            stmt = select(WebhookTrigger).where(
+                            webhook_stmt = select(WebhookTrigger).where(
                                 WebhookTrigger.trigger_id == trigger.id
                             )
-                            webhook_config = await db.scalar(stmt)
+                            webhook_config = await db.scalar(webhook_stmt)
                             if webhook_config:
                                 trigger_dict["webhook_config"] = cls._serialize_webhook_trigger(
                                     webhook_config)
@@ -135,11 +218,19 @@ class CacheService:
                 else:
                     await cls._remove_from_active_monitors(tenant_id, monitor_id)
 
-                # Publish update notification
-                await redis_client.publish(
-                    CHANNELS["monitor_update"],
-                    {"tenant_id": tenant_id,
-                        "monitor_id": monitor_id, "action": "update"}
+                # Publish update notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.UPDATE,
+                    resource_type=CacheResourceType.MONITOR,
+                    resource_id=monitor_id,
+                    tenant_id=tenant_id,
+                    metadata={
+                        "active": monitor.active,
+                        "paused": monitor.paused,
+                        "validated": monitor.validated,
+                        "name": monitor.name,
+                        "slug": monitor.slug
+                    }
                 )
 
                 logger.info(
@@ -152,7 +243,7 @@ class CacheService:
             return False
 
     @classmethod
-    async def get_monitor(cls, tenant_id: str, monitor_id: str) -> Optional[Dict[str, Any]]:
+    async def get_monitor(cls, tenant_id: str, monitor_id: str) -> Optional[dict[str, Any]]:
         """Get a cached monitor.
 
         Args:
@@ -184,11 +275,12 @@ class CacheService:
                 # Remove from active list
                 await cls._remove_from_active_monitors(tenant_id, monitor_id)
 
-                # Publish deletion notification
-                await redis_client.publish(
-                    CHANNELS["monitor_update"],
-                    {"tenant_id": tenant_id,
-                        "monitor_id": monitor_id, "action": "delete"}
+                # Publish deletion notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.DELETE,
+                    resource_type=CacheResourceType.MONITOR,
+                    resource_id=monitor_id,
+                    tenant_id=tenant_id
                 )
 
                 logger.info(f"Deleted monitor {monitor_id} from cache")
@@ -213,7 +305,7 @@ class CacheService:
         await redis_client.srem(key, monitor_id)
 
     @classmethod
-    async def get_active_monitors(cls, tenant_id: str) -> List[str]:
+    async def get_active_monitors(cls, tenant_id: str) -> list[str]:
         """Get list of active monitor IDs for a tenant.
 
         Args:
@@ -278,11 +370,20 @@ class CacheService:
                 # Optionally cache as platform network if shared
                 # await redis_client.set(platform_key, network_data, expiration=CACHE_TTL["network"])
 
-                # Publish update notification
-                await redis_client.publish(
-                    CHANNELS["network_update"],
-                    {"tenant_id": tenant_id,
-                        "network_id": network_id, "action": "update"}
+                # Publish update notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.UPDATE,
+                    resource_type=CacheResourceType.NETWORK,
+                    resource_id=network_id,
+                    tenant_id=tenant_id,
+                    metadata={
+                        "name": network.name,
+                        "slug": network.slug,
+                        "network_type": network.network_type,
+                        "chain_id": network.chain_id,
+                        "active": network.active,
+                        "validated": network.validated
+                    }
                 )
 
                 logger.info(
@@ -295,7 +396,7 @@ class CacheService:
             return False
 
     @classmethod
-    async def get_network(cls, tenant_id: str, network_id: str) -> Optional[Dict[str, Any]]:
+    async def get_network(cls, tenant_id: str, network_id: str) -> Optional[dict[str, Any]]:
         """Get a cached network.
 
         Args:
@@ -324,11 +425,12 @@ class CacheService:
             deleted = await redis_client.delete(key) > 0
 
             if deleted:
-                # Publish deletion notification
-                await redis_client.publish(
-                    CHANNELS["network_update"],
-                    {"tenant_id": tenant_id,
-                        "network_id": network_id, "action": "delete"}
+                # Publish deletion notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.DELETE,
+                    resource_type=CacheResourceType.NETWORK,
+                    resource_id=network_id,
+                    tenant_id=tenant_id
                 )
 
                 logger.info(f"Deleted network {network_id} from cache")
@@ -342,7 +444,7 @@ class CacheService:
     # ============== Trigger Caching ==============
 
     @classmethod
-    def _denormalize_trigger(cls, trigger: Trigger) -> Dict[str, Any]:
+    def _denormalize_trigger(cls, trigger: Trigger) -> dict[str, Any]:
         """Denormalize trigger base data."""
         return {
             "id": cls._serialize_uuid(trigger.id),
@@ -360,7 +462,7 @@ class CacheService:
         }
 
     @classmethod
-    def _serialize_email_trigger(cls, email: EmailTrigger) -> Dict[str, Any]:
+    def _serialize_email_trigger(cls, email: EmailTrigger) -> dict[str, Any]:
         """Serialize email trigger config."""
         return {
             "host": email.host,
@@ -376,7 +478,7 @@ class CacheService:
         }
 
     @classmethod
-    def _serialize_webhook_trigger(cls, webhook: WebhookTrigger) -> Dict[str, Any]:
+    def _serialize_webhook_trigger(cls, webhook: WebhookTrigger) -> dict[str, Any]:
         """Serialize webhook trigger config."""
         return {
             "url_type": webhook.url_type,
@@ -409,17 +511,17 @@ class CacheService:
 
             # Fetch type-specific config
             if trigger.trigger_type == "email":
-                stmt = select(EmailTrigger).where(
+                email_stmt = select(EmailTrigger).where(
                     EmailTrigger.trigger_id == trigger.id)
-                email_config = await db.scalar(stmt)
+                email_config = await db.scalar(email_stmt)
                 if email_config:
                     trigger_data["email_config"] = cls._serialize_email_trigger(
                         email_config)
 
             elif trigger.trigger_type == "webhook":
-                stmt = select(WebhookTrigger).where(
+                webhook_stmt = select(WebhookTrigger).where(
                     WebhookTrigger.trigger_id == trigger.id)
-                webhook_config = await db.scalar(stmt)
+                webhook_config = await db.scalar(webhook_stmt)
                 if webhook_config:
                     trigger_data["webhook_config"] = cls._serialize_webhook_trigger(
                         webhook_config)
@@ -429,11 +531,19 @@ class CacheService:
             success = await redis_client.set(key, trigger_data, expiration=CACHE_TTL["trigger"])
 
             if success:
-                # Publish update notification
-                await redis_client.publish(
-                    CHANNELS["trigger_update"],
-                    {"tenant_id": tenant_id,
-                        "trigger_id": trigger_id, "action": "update"}
+                # Publish update notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.UPDATE,
+                    resource_type=CacheResourceType.TRIGGER,
+                    resource_id=trigger_id,
+                    tenant_id=tenant_id,
+                    metadata={
+                        "name": trigger.name,
+                        "slug": trigger.slug,
+                        "trigger_type": trigger.trigger_type,
+                        "active": trigger.active,
+                        "validated": trigger.validated
+                    }
                 )
 
                 logger.info(
@@ -446,7 +556,7 @@ class CacheService:
             return False
 
     @classmethod
-    async def get_trigger(cls, tenant_id: str, trigger_id: str) -> Optional[Dict[str, Any]]:
+    async def get_trigger(cls, tenant_id: str, trigger_id: str) -> Optional[dict[str, Any]]:
         """Get a cached trigger.
 
         Args:
@@ -475,11 +585,12 @@ class CacheService:
             deleted = await redis_client.delete(key) > 0
 
             if deleted:
-                # Publish deletion notification
-                await redis_client.publish(
-                    CHANNELS["trigger_update"],
-                    {"tenant_id": tenant_id,
-                        "trigger_id": trigger_id, "action": "delete"}
+                # Publish deletion notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.DELETE,
+                    resource_type=CacheResourceType.TRIGGER,
+                    resource_id=trigger_id,
+                    tenant_id=tenant_id
                 )
 
                 logger.info(f"Deleted trigger {trigger_id} from cache")
@@ -507,10 +618,16 @@ class CacheService:
             deleted = await redis_client.delete_pattern(pattern)
 
             if deleted > 0:
-                # Publish invalidation notification
-                await redis_client.publish(
-                    CHANNELS["config_update"],
-                    {"tenant_id": tenant_id, "action": "invalidate_all"}
+                # Publish invalidation notification using centralized method
+                await cls._publish_cache_event(
+                    event_type=CacheEventType.INVALIDATE,
+                    resource_type=CacheResourceType.TENANT,
+                    resource_id=tenant_id,
+                    tenant_id=tenant_id,
+                    metadata={
+                        "entries_deleted": deleted,
+                        "action": "invalidate_all"
+                    }
                 )
 
                 logger.info(
@@ -523,7 +640,7 @@ class CacheService:
             return 0
 
     @classmethod
-    async def get_tenant_cache_keys(cls, tenant_id: str) -> List[str]:
+    async def get_tenant_cache_keys(cls, tenant_id: str) -> list[str]:
         """Get all cache keys for a tenant.
 
         Args:

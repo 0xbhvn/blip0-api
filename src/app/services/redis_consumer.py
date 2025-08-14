@@ -6,7 +6,7 @@ This demonstrates how oz-multi-tenant could subscribe to configuration changes.
 import asyncio
 import json
 from collections.abc import Callable
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ..core.logger import logging
 from ..core.redis_client import redis_client
@@ -18,7 +18,7 @@ class RedisConfigConsumer:
     """Consumer for Redis pub/sub configuration updates."""
 
     def __init__(self):
-        self.handlers: Dict[str, Callable] = {}
+        self.handlers: dict[str, Callable] = {}
         self.running = False
         self._task: Optional[asyncio.Task] = None
 
@@ -32,7 +32,7 @@ class RedisConfigConsumer:
         self.handlers[channel] = handler
         logger.info(f"Registered handler for channel: {channel}")
 
-    async def handle_config_update(self, message: Dict[str, Any]) -> None:
+    async def handle_config_update(self, message: dict[str, Any]) -> None:
         """Handle configuration update messages.
 
         Args:
@@ -90,7 +90,7 @@ class RedisConfigConsumer:
             # In oz-multi-tenant, this would trigger a full reload for the tenant
             # await self.reload_tenant_configuration(tenant_id)
 
-    async def handle_monitor_update(self, message: Dict[str, Any]) -> None:
+    async def handle_monitor_update(self, message: dict[str, Any]) -> None:
         """Handle monitor-specific update messages.
 
         Args:
@@ -107,7 +107,7 @@ class RedisConfigConsumer:
         # In oz-multi-tenant, this would update the specific monitor
         # await self.update_monitor(tenant_id, monitor_id)
 
-    async def handle_network_update(self, message: Dict[str, Any]) -> None:
+    async def handle_network_update(self, message: dict[str, Any]) -> None:
         """Handle network-specific update messages.
 
         Args:
@@ -124,7 +124,7 @@ class RedisConfigConsumer:
         # In oz-multi-tenant, this would update the specific network
         # await self.update_network(tenant_id, network_id)
 
-    async def handle_trigger_update(self, message: Dict[str, Any]) -> None:
+    async def handle_trigger_update(self, message: dict[str, Any]) -> None:
         """Handle trigger-specific update messages.
 
         Args:
