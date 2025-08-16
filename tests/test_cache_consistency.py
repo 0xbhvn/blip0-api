@@ -18,14 +18,12 @@ and focus on testing the actual caching logic rather than implementation details
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, Mock, call, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from faker import Faker
 from redis.exceptions import RedisError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.models.monitor import Monitor
@@ -99,9 +97,9 @@ class TestCacheServiceFixtures:
         monitor.match_transactions = []
         monitor.trigger_conditions = []
         monitor.triggers = ["email-trigger-1"]
-        monitor.created_at = datetime.now(timezone.utc)
-        monitor.updated_at = datetime.now(timezone.utc)
-        monitor.last_validated_at = datetime.now(timezone.utc)
+        monitor.created_at = datetime.now(UTC)
+        monitor.updated_at = datetime.now(UTC)
+        monitor.last_validated_at = datetime.now(UTC)
 
         return monitor
 
@@ -129,9 +127,9 @@ class TestCacheServiceFixtures:
         network.active = True
         network.validated = True
         network.validation_errors = None
-        network.created_at = datetime.now(timezone.utc)
-        network.updated_at = datetime.now(timezone.utc)
-        network.last_validated_at = datetime.now(timezone.utc)
+        network.created_at = datetime.now(UTC)
+        network.updated_at = datetime.now(UTC)
+        network.last_validated_at = datetime.now(UTC)
 
         return network
 
@@ -151,9 +149,9 @@ class TestCacheServiceFixtures:
         trigger.active = True
         trigger.validated = True
         trigger.validation_errors = None
-        trigger.created_at = datetime.now(timezone.utc)
-        trigger.updated_at = datetime.now(timezone.utc)
-        trigger.last_validated_at = datetime.now(timezone.utc)
+        trigger.created_at = datetime.now(UTC)
+        trigger.updated_at = datetime.now(UTC)
+        trigger.last_validated_at = datetime.now(UTC)
 
         return trigger
 
@@ -591,7 +589,7 @@ class TestActiveMonitorsList(TestCacheServiceFixtures):
         """Test adding monitor to active monitors list."""
         monitor_id = str(uuid.uuid4())
 
-        with patch("src.app.services.cache_service.CacheService._add_to_active_monitors") as mock_add:
+        with patch("src.app.services.cache_service.CacheService._add_to_active_monitors"):
             await CacheService._add_to_active_monitors(sample_tenant_id, monitor_id)
 
         # This is tested indirectly through cache_monitor tests
@@ -893,7 +891,7 @@ class TestErrorHandlingAndRecovery(TestCacheServiceFixtures):
     async def test_database_query_timeout(self, mock_redis, mock_db, sample_monitor):
         """Test handling of database query timeouts."""
         # Simulate database timeout
-        mock_db.scalar.side_effect = asyncio.TimeoutError("Query timeout")
+        mock_db.scalar.side_effect = TimeoutError("Query timeout")
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.cache_monitor(mock_db, sample_monitor)
@@ -935,7 +933,7 @@ class TestDataSerialization(TestCacheServiceFixtures):
 
     def test_serialize_datetime(self):
         """Test datetime serialization."""
-        dt = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
         result = CacheService._serialize_datetime(dt)
         assert result == "2023-01-01T12:00:00+00:00"
 
@@ -1012,12 +1010,6 @@ class TestCacheConsistencyChecks(TestCacheServiceFixtures):
     ):
         """Test that cache invalidation removes all related keys."""
         # Setup some cached keys
-        cached_keys = [
-            f"tenant:{sample_tenant_id}:monitor:123",
-            f"tenant:{sample_tenant_id}:network:456",
-            f"tenant:{sample_tenant_id}:trigger:789",
-            f"tenant:{sample_tenant_id}:monitors:active"
-        ]
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.invalidate_tenant_cache(sample_tenant_id)
