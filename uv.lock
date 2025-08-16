@@ -402,6 +402,7 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "faker" },
     { name = "pytest-asyncio" },
 ]
 
@@ -442,7 +443,10 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest-asyncio", specifier = ">=1.0.0" }]
+dev = [
+    { name = "faker", specifier = ">=37.3.0" },
+    { name = "pytest-asyncio", specifier = ">=1.0.0" },
+]
 
 [[package]]
 name = "fastcrud"

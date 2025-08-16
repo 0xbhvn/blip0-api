@@ -62,10 +62,10 @@ class MonitorService:
         if isinstance(tenant_id, str):
             tenant_id = uuid_pkg.UUID(tenant_id)
 
-        monitor_internal = MonitorCreateInternal(
-            **monitor_in.model_dump(),
-            tenant_id=tenant_id
-        )
+        # Create internal schema with correct tenant_id
+        monitor_data = monitor_in.model_dump()
+        monitor_data["tenant_id"] = tenant_id
+        monitor_internal = MonitorCreateInternal(**monitor_data)
 
         db_monitor = await self.crud_monitor.create(
             db=db,

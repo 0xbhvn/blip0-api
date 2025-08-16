@@ -104,6 +104,7 @@ filterwarnings = [
 
 [dependency-groups]
 dev = [
+    "faker>=37.3.0",
     "pytest-asyncio>=1.0.0",
 ]
 
