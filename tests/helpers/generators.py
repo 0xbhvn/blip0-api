@@ -1,4 +1,3 @@
-import uuid as uuid_pkg
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +13,6 @@ def create_user(db: Session, is_super_user: bool = False) -> models.User:
         email=fake.email(),
         hashed_password=get_password_hash(fake.password()),
         profile_image_url=fake.image_url(),
-        uuid=uuid_pkg.uuid4(),
         is_superuser=is_super_user,
     )
 

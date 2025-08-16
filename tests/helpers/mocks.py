@@ -7,7 +7,8 @@ from tests.conftest import fake
 
 
 def get_current_user(user: models.User) -> dict[str, Any]:
-    return jsonable_encoder(user)
+    result = jsonable_encoder(user)
+    return dict(result)  # Explicitly cast to dict to satisfy mypy
 
 
 def oauth2_scheme() -> str:
