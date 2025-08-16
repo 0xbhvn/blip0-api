@@ -67,6 +67,10 @@ class TestCacheServiceFixtures:
         mock_db = AsyncMock(spec=AsyncSession)
         mock_db.scalar.return_value = None
         mock_db.execute.return_value.scalars.return_value.all.return_value = []
+        # Add scalars mock for direct calls
+        mock_result = AsyncMock()
+        mock_result.all.return_value = []
+        mock_db.scalars.return_value = mock_result
         return mock_db
 
     @pytest.fixture
@@ -333,7 +337,7 @@ class TestMonitorCaching(TestCacheServiceFixtures):
         self, mock_redis, mock_db, sample_monitor
     ):
         """Test monitor caching when database query fails."""
-        mock_db.scalar.side_effect = Exception("Database error")
+        mock_db.scalars.side_effect = Exception("Database error")
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.cache_monitor(mock_db, sample_monitor)
@@ -891,7 +895,7 @@ class TestErrorHandlingAndRecovery(TestCacheServiceFixtures):
     async def test_database_query_timeout(self, mock_redis, mock_db, sample_monitor):
         """Test handling of database query timeouts."""
         # Simulate database timeout
-        mock_db.scalar.side_effect = TimeoutError("Query timeout")
+        mock_db.scalars.side_effect = TimeoutError("Query timeout")
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.cache_monitor(mock_db, sample_monitor)
@@ -905,9 +909,11 @@ class TestErrorHandlingAndRecovery(TestCacheServiceFixtures):
         self, mock_redis, mock_db, sample_monitor, sample_trigger
     ):
         """Test handling of partial data corruption in trigger queries."""
-        # First query succeeds (gets trigger), second fails (gets trigger config)
-        mock_db.scalar.side_effect = [
-            sample_trigger, Exception("Data corruption")]
+        # Mock db.scalars to raise an exception on trigger query
+        async def mock_scalars(stmt):
+            raise Exception("Data corruption")
+
+        mock_db.scalars = mock_scalars
 
         with patch("src.app.services.cache_service.redis_client", mock_redis):
             result = await CacheService.cache_monitor(mock_db, sample_monitor)

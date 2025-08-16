@@ -146,8 +146,7 @@ class TestNetworkService:
         """Test get_network with cache hit."""
         network_id = str(sample_network_read.id)
 
-        with patch.object(network_service, "_get_cached_network_by_id") as mock_get_cached:
-            mock_get_cached.return_value = sample_network_read
+        with patch.object(network_service, "_get_cached_network_by_id", new=AsyncMock(return_value=sample_network_read)) as mock_get_cached:
 
             result = await network_service.get_network(mock_db, network_id)
 

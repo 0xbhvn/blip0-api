@@ -760,15 +760,43 @@ class TestMonitorServiceCachingMethods:
             assert call_args[1]["expiration"] == 1800
 
     @pytest.mark.asyncio
-    async def test_cache_monitor_error(self, monitor_service, sample_monitor):
+    async def test_cache_monitor_error(self, monitor_service):
         """Test error handling in _cache_monitor."""
         tenant_id = "test-tenant"
 
-        with patch("src.app.services.monitor_service.redis_client.set") as mock_set:
-            mock_set.side_effect = Exception("Redis error")
+        # Create a proper monitor object to avoid mock issues
+        from datetime import datetime
 
+        from src.app.schemas.monitor import MonitorRead
+
+        monitor = MonitorRead(
+            id=uuid.uuid4(),
+            tenant_id=uuid.uuid4(),
+            name="Test Monitor",
+            slug="test-monitor",
+            description="Test description",
+            paused=False,
+            networks=["ethereum"],
+            addresses=[],
+            match_functions=[],
+            match_events=[],
+            match_transactions=[],
+            trigger_conditions=[],
+            triggers=[],
+            active=True,
+            validated=True,
+            validation_errors=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            last_validated_at=None
+        )
+
+        async def mock_redis_set(*args, **kwargs):
+            raise Exception("Redis error")
+
+        with patch("src.app.services.monitor_service.redis_client.set", new=mock_redis_set):
             # Should not raise exception
-            await monitor_service._cache_monitor(sample_monitor, tenant_id)
+            await monitor_service._cache_monitor(monitor, tenant_id)
 
     @pytest.mark.asyncio
     async def test_get_cached_monitor_hit(self, monitor_service):
@@ -801,8 +829,10 @@ class TestMonitorServiceCachingMethods:
             "last_validated_at": now.isoformat()
         }
 
-        with patch("src.app.services.monitor_service.redis_client.get") as mock_get:
-            mock_get.return_value = json.dumps(cached_data)
+        async def mock_redis_get(*args, **kwargs):
+            return json.dumps(cached_data)
+
+        with patch("src.app.services.monitor_service.redis_client.get", new=mock_redis_get):
 
             result = await monitor_service._get_cached_monitor(tenant_id, monitor_id)
 
@@ -815,8 +845,10 @@ class TestMonitorServiceCachingMethods:
         tenant_id = "test-tenant"
         monitor_id = str(uuid.uuid4())
 
-        with patch("src.app.services.monitor_service.redis_client.get") as mock_get:
-            mock_get.return_value = None
+        async def mock_redis_get_none(*args, **kwargs):
+            return None
+
+        with patch("src.app.services.monitor_service.redis_client.get", new=mock_redis_get_none):
 
             result = await monitor_service._get_cached_monitor(tenant_id, monitor_id)
 
