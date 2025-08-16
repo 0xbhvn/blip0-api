@@ -25,7 +25,7 @@ class Tenant(Base):
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -48,7 +48,7 @@ class Tenant(Base):
     settings: Mapped[dict] = mapped_column(
         JSON,
         nullable=False,
-        default=dict,
+        default_factory=dict,
         server_default="{}",
         comment="Tenant-specific settings and configurations"
     )
@@ -57,13 +57,13 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         onupdate=lambda: datetime.now(UTC)
     )
@@ -179,13 +179,13 @@ class TenantLimits(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         onupdate=lambda: datetime.now(UTC)
     )
