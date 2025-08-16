@@ -384,7 +384,8 @@ class CRUDTenant(
     async def get_by_slug(
         self,
         db: AsyncSession,
-        slug: str
+        slug: str,
+        tenant_id: Optional[Any] = None
     ) -> Optional[Tenant]:
         """
         Get tenant by slug.
@@ -392,10 +393,12 @@ class CRUDTenant(
         Args:
             db: Database session
             slug: Tenant slug
+            tenant_id: Optional tenant ID (for consistency, not used for tenants)
 
         Returns:
             Tenant if found, None otherwise
         """
+        # Note: tenant_id is ignored for tenant lookup, but kept for consistent API
         query = select(Tenant).where(Tenant.slug == slug)
         result = await db.execute(query)
         return result.scalar_one_or_none()

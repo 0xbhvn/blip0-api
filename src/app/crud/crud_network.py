@@ -98,7 +98,8 @@ class CRUDNetwork(
     async def get_by_slug(
         self,
         db: AsyncSession,
-        slug: str
+        slug: str,
+        tenant_id: Optional[Any] = None
     ) -> Optional[Network]:
         """
         Get network by slug.
@@ -106,11 +107,17 @@ class CRUDNetwork(
         Args:
             db: Database session
             slug: Network slug
+            tenant_id: Optional tenant ID for multi-tenant isolation
 
         Returns:
             Network if found, None otherwise
         """
         query = select(Network).where(Network.slug == slug)
+
+        # Apply tenant filter if provided
+        if tenant_id is not None:
+            query = query.where(Network.tenant_id == tenant_id)
+
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
