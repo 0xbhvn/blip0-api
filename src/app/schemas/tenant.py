@@ -129,6 +129,7 @@ class TenantRead(TenantBase, TimestampSchema):
     """Schema for reading tenant data."""
     id: uuid_pkg.UUID
     status: str
+    is_active: bool = Field(default=True, description="Whether tenant is active")
     model_config = ConfigDict(from_attributes=True)
 
 
