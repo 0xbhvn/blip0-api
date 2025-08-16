@@ -198,7 +198,7 @@ class CRUDMonitor(
         monitor_dict = MonitorRead.model_validate(monitor).model_dump()
 
         # Add denormalized trigger data
-        triggers_data = []
+        triggers_data: list[dict[str, Any]] = []
         # Note: This would need the relationship to be defined in the model
         # For now, we'll just return empty triggers_data
         if False:  # hasattr(monitor, 'trigger_instances'):
@@ -309,8 +309,11 @@ class CRUDMonitor(
         Returns:
             Updated monitor or None
         """
-        update_data = MonitorUpdate()
-        update_data.paused = True
+        update_data = MonitorUpdate(
+            name=None,
+            slug=None,
+            paused=True
+        )
         return await self.update_with_cache(
             db,
             monitor_id,
@@ -338,8 +341,11 @@ class CRUDMonitor(
         Returns:
             Updated monitor or None
         """
-        update_data = MonitorUpdate()
-        update_data.paused = False
+        update_data = MonitorUpdate(
+            name=None,
+            slug=None,
+            paused=False
+        )
         return await self.update_with_cache(
             db,
             monitor_id,

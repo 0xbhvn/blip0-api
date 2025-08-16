@@ -301,8 +301,14 @@ class CRUDTenant(
         Returns:
             Paginated active tenants
         """
-        filters = TenantFilter()
-        filters.status = "active"
+        filters = TenantFilter(
+            name=None,
+            slug=None,
+            plan=None,
+            status="active",
+            created_after=None,
+            created_before=None
+        )
         return await self.get_paginated(
             db,
             page=page,

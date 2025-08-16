@@ -6,12 +6,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.audit import BlockState, MissedBlock, MonitorMatch, TriggerExecution
-from pydantic import BaseModel
-
 from ..schemas.audit import (
     BlockProcessingStats,
     BlockStateCreate,
@@ -91,7 +90,10 @@ class CRUDBlockState(
                 tenant_id=tenant_id,
                 network_id=network_id,
                 processing_status="idle",
-                error_count=0
+                error_count=0,
+                last_processed_block=None,
+                blocks_per_minute=None,
+                average_processing_time_ms=None
             )
             state = BlockState(**create_data.model_dump())
             db.add(state)
@@ -595,7 +597,8 @@ class CRUDTriggerExecution(
             execution_type=execution_type,
             execution_data=execution_data,
             status="pending",
-            retry_count=0
+            retry_count=0,
+            duration_ms=None
         )
         execution = TriggerExecution(**create_data.model_dump())
         db.add(execution)

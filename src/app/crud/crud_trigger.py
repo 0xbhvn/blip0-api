@@ -361,8 +361,11 @@ class CRUDTrigger(
         Returns:
             Updated trigger or None
         """
-        update_data = TriggerUpdate()
-        update_data.active = True
+        update_data = TriggerUpdate(
+            name=None,
+            slug=None,
+            active=True
+        )
         return await self.update_with_config(
             db,
             trigger_id,
@@ -387,8 +390,11 @@ class CRUDTrigger(
         Returns:
             Updated trigger or None
         """
-        update_data = TriggerUpdate()
-        update_data.active = False
+        update_data = TriggerUpdate(
+            name=None,
+            slug=None,
+            active=False
+        )
         return await self.update_with_config(
             db,
             trigger_id,
