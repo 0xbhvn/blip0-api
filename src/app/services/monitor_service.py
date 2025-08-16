@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..core.logger import logging
-from ..core.redis_client import RedisClient
+from ..core.redis_client import redis_client
 from ..crud.crud_monitor import CRUDMonitor
 from ..crud.crud_trigger import CRUDTrigger
 from ..models.monitor import Monitor
@@ -290,7 +290,7 @@ class MonitorService:
             monitor_dict = MonitorRead.model_validate(monitor).model_dump_json()
 
             # Cache for 30 minutes (Rust monitor refreshes every 30 seconds)
-            await RedisClient.set(key, monitor_dict, expiration=1800)
+            await redis_client.set(key, monitor_dict, expiration=1800)
         except Exception as e:
             logger.error(f"Failed to cache monitor {monitor.id}: {e}")
 
@@ -303,7 +303,7 @@ class MonitorService:
         """Cache denormalized monitor with triggers."""
         try:
             key = f"tenant:{tenant_id}:monitor:{monitor_id}"
-            await RedisClient.set(key, json.dumps(monitor_dict), expiration=1800)
+            await redis_client.set(key, json.dumps(monitor_dict), expiration=1800)
         except Exception as e:
             logger.error(f"Failed to cache denormalized monitor {monitor_id}: {e}")
 
@@ -315,7 +315,7 @@ class MonitorService:
         """Get monitor from cache."""
         try:
             key = f"tenant:{tenant_id}:monitor:{monitor_id}"
-            cached = await RedisClient.get(key)
+            cached = await redis_client.get(key)
 
             if cached:
                 if isinstance(cached, str):
@@ -334,7 +334,7 @@ class MonitorService:
         """Invalidate monitor cache."""
         try:
             key = f"tenant:{tenant_id}:monitor:{monitor_id}"
-            await RedisClient.delete(key)
+            await redis_client.delete(key)
         except Exception as e:
             logger.error(f"Failed to invalidate monitor cache {monitor_id}: {e}")
 
@@ -346,8 +346,8 @@ class MonitorService:
         """Add monitor to tenant's active monitors list."""
         try:
             key = f"tenant:{tenant_id}:monitors:active"
-            await RedisClient.sadd(key, monitor_id)
-            await RedisClient.expire(key, 3600)  # Expire after 1 hour
+            await redis_client.sadd(key, monitor_id)
+            await redis_client.expire(key, 3600)  # Expire after 1 hour
         except Exception as e:
             logger.error(f"Failed to add monitor {monitor_id} to active list: {e}")
 
@@ -359,7 +359,7 @@ class MonitorService:
         """Remove monitor from tenant's active monitors list."""
         try:
             key = f"tenant:{tenant_id}:monitors:active"
-            await RedisClient.srem(key, monitor_id)
+            await redis_client.srem(key, monitor_id)
         except Exception as e:
             logger.error(f"Failed to remove monitor {monitor_id} from active list: {e}")
 
@@ -367,7 +367,7 @@ class MonitorService:
         """Get all active monitor IDs for a tenant from cache."""
         try:
             key = f"tenant:{tenant_id}:monitors:active"
-            monitor_ids = await RedisClient.smembers(key)
+            monitor_ids = await redis_client.smembers(key)
             return {str(mid) for mid in monitor_ids}
         except Exception as e:
             logger.error(f"Failed to get active monitors for tenant {tenant_id}: {e}")
@@ -401,11 +401,11 @@ class MonitorService:
 
         # Clear existing cache
         pattern = f"tenant:{tenant_id}:monitor:*"
-        await RedisClient.delete_pattern(pattern)
+        await redis_client.delete_pattern(pattern)
 
         # Clear active monitors set
         active_key = f"tenant:{tenant_id}:monitors:active"
-        await RedisClient.delete(active_key)
+        await redis_client.delete(active_key)
 
         # Re-cache all monitors
         count = 0
@@ -428,3 +428,10 @@ class MonitorService:
 
         logger.info(f"Refreshed {count} monitors for tenant {tenant_id}")
         return count
+
+
+# Export service instance
+from ..crud.crud_monitor import crud_monitor
+from ..crud.crud_trigger import crud_trigger
+
+monitor_service = MonitorService(crud_monitor, crud_trigger)

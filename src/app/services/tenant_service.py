@@ -10,8 +10,8 @@ from typing import Any, Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logger import logging
-from ..core.redis_client import RedisClient
-from ..crud.crud_tenant import CRUDTenant
+from ..core.redis_client import redis_client
+from ..crud.crud_tenant import CRUDTenant, crud_tenant
 from ..schemas.tenant import (
     TenantCreate,
     TenantCreateInternal,
@@ -254,7 +254,7 @@ class TenantService:
             tenant_dict = TenantRead.model_validate(tenant).model_dump_json()
 
             # Cache for 1 hour (tenant config changes infrequently)
-            await RedisClient.set(key, tenant_dict, expiration=3600)
+            await redis_client.set(key, tenant_dict, expiration=3600)
         except Exception as e:
             logger.error(f"Failed to cache tenant {tenant.id}: {e}")
 
@@ -262,7 +262,7 @@ class TenantService:
         """Get tenant from cache."""
         try:
             key = f"tenant:{tenant_id}:config"
-            cached = await RedisClient.get(key)
+            cached = await redis_client.get(key)
 
             if cached:
                 if isinstance(cached, str):
@@ -277,7 +277,7 @@ class TenantService:
         """Invalidate tenant cache."""
         try:
             key = f"tenant:{tenant_id}:config"
-            await RedisClient.delete(key)
+            await redis_client.delete(key)
         except Exception as e:
             logger.error(f"Failed to invalidate tenant cache {tenant_id}: {e}")
 
@@ -294,10 +294,11 @@ class TenantService:
 
             deleted_count = 0
             for pattern in patterns:
-                count = await RedisClient.delete_pattern(pattern)
+                count = await redis_client.delete_pattern(pattern)
                 deleted_count += count
 
-            logger.info(f"Cleaned up {deleted_count} cache keys for tenant {tenant_id}")
+            logger.info(
+                f"Cleaned up {deleted_count} cache keys for tenant {tenant_id}")
         except Exception as e:
             logger.error(f"Failed to cleanup tenant cache {tenant_id}: {e}")
 
@@ -335,9 +336,14 @@ class TenantService:
         # Get active monitor count from cache
         try:
             monitor_key = f"tenant:{tenant_id_str}:monitors:active"
-            monitor_ids = await RedisClient.smembers(monitor_key)
+            monitor_ids = await redis_client.smembers(monitor_key)
             stats["active_monitors"] = len(monitor_ids)
         except Exception:
             pass
 
         return stats
+
+
+# Export service instance
+
+tenant_service = TenantService(crud_tenant)

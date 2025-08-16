@@ -9,8 +9,8 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logger import logging
-from ..core.redis_client import RedisClient
-from ..crud.crud_network import CRUDNetwork
+from ..core.redis_client import redis_client
+from ..crud.crud_network import CRUDNetwork, crud_network
 from ..schemas.network import (
     NetworkCreate,
     NetworkCreateInternal,
@@ -269,14 +269,15 @@ class NetworkService:
         try:
             # Cache by slug (primary access pattern for Rust monitor)
             slug_key = f"platform:networks:{network.slug}"
-            network_dict = NetworkRead.model_validate(network).model_dump_json()
+            network_dict = NetworkRead.model_validate(
+                network).model_dump_json()
 
             # Cache for 1 hour (networks change infrequently)
-            await RedisClient.set(slug_key, network_dict, expiration=3600)
+            await redis_client.set(slug_key, network_dict, expiration=3600)
 
             # Also cache by ID for admin operations
             id_key = f"platform:network:id:{network.id}"
-            await RedisClient.set(id_key, network_dict, expiration=3600)
+            await redis_client.set(id_key, network_dict, expiration=3600)
 
         except Exception as e:
             logger.error(f"Failed to cache network {network.slug}: {e}")
@@ -285,7 +286,7 @@ class NetworkService:
         """Get network from cache by slug."""
         try:
             key = f"platform:networks:{slug}"
-            cached = await RedisClient.get(key)
+            cached = await redis_client.get(key)
 
             if cached:
                 if isinstance(cached, str):
@@ -300,7 +301,7 @@ class NetworkService:
         """Get network from cache by ID."""
         try:
             key = f"platform:network:id:{network_id}"
-            cached = await RedisClient.get(key)
+            cached = await redis_client.get(key)
 
             if cached:
                 if isinstance(cached, str):
@@ -308,7 +309,8 @@ class NetworkService:
                 return NetworkRead.model_validate(cached)
             return None
         except Exception as e:
-            logger.error(f"Failed to get cached network by ID {network_id}: {e}")
+            logger.error(
+                f"Failed to get cached network by ID {network_id}: {e}")
             return None
 
     async def _invalidate_network_cache(self, slug: str, network_id: str) -> None:
@@ -316,7 +318,7 @@ class NetworkService:
         try:
             slug_key = f"platform:networks:{slug}"
             id_key = f"platform:network:id:{network_id}"
-            await RedisClient.delete(slug_key, id_key)
+            await redis_client.delete(slug_key, id_key)
         except Exception as e:
             logger.error(f"Failed to invalidate network cache {slug}: {e}")
 
@@ -332,17 +334,19 @@ class NetworkService:
             Number of networks refreshed
         """
         # Get all networks
-        networks = await self.crud_network.get_multi(db=db)
+        networks_result = await self.crud_network.get_multi(db=db)
+        networks = networks_result.get("data", []) if isinstance(
+            networks_result, dict) else []
 
         # Clear existing cache
         pattern = "platform:networks:*"
-        await RedisClient.delete_pattern(pattern)
+        await redis_client.delete_pattern(pattern)
         pattern = "platform:network:id:*"
-        await RedisClient.delete_pattern(pattern)
+        await redis_client.delete_pattern(pattern)
 
         # Re-cache all networks
         count = 0
-        for network in networks:
+        for network in networks:  # type: ignore[union-attr]
             await self._cache_network(network)
             count += 1
 
@@ -359,5 +363,12 @@ class NetworkService:
         Returns:
             List of network slugs
         """
-        networks = await self.crud_network.get_multi(db=db)
-        return [str(network.slug) for network in networks if hasattr(network, 'slug')]
+        networks_result = await self.crud_network.get_multi(db=db)
+        networks = networks_result.get("data", []) if isinstance(
+            networks_result, dict) else []
+        return [str(network.slug) for network in networks if hasattr(network, 'slug')]  # type: ignore[union-attr]
+
+
+# Export service instance
+
+network_service = NetworkService(crud_network)

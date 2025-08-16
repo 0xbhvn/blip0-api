@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.redis_client import RedisClient
+from ..core.redis_client import redis_client
 from ..crud.crud_trigger import crud_trigger
 from ..models.trigger import Trigger
 from ..schemas.trigger import (
@@ -26,7 +26,7 @@ from .base_service import BaseService
 class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerRead]):
     """Service layer for trigger operations with Redis caching."""
 
-    def __init__(self):
+    def __init__(self, crud_trigger):
         """Initialize the trigger service."""
         super().__init__(crud_trigger)
         self.crud_trigger = crud_trigger
@@ -130,7 +130,9 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             # Update Redis cache
             await self._cache_trigger(db_trigger, str(tenant_id))
 
-        return TriggerRead.model_validate(db_trigger) if db_trigger and not isinstance(db_trigger, TriggerRead) else db_trigger
+        if db_trigger and not isinstance(db_trigger, TriggerRead):
+            return TriggerRead.model_validate(db_trigger)
+        return db_trigger  # type: ignore[no-any-return]
 
     async def delete_trigger(
         self,
@@ -196,7 +198,7 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
 
         # Check Redis cache first
         cache_key = self.get_cache_key(trigger_id_str, tenant_id=tenant_id_str)
-        cached_data = await RedisClient.get(cache_key)
+        cached_data = await redis_client.get(cache_key)
 
         if cached_data:
             return TriggerRead.model_validate_json(cached_data)
@@ -214,7 +216,9 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             # Cache for next time
             await self._cache_trigger(db_trigger, tenant_id_str)
 
-        return TriggerRead.model_validate(db_trigger) if db_trigger and not isinstance(db_trigger, TriggerRead) else db_trigger
+        if db_trigger and not isinstance(db_trigger, TriggerRead):
+            return TriggerRead.model_validate(db_trigger)
+        return db_trigger  # type: ignore[no-any-return]
 
     async def get_trigger_by_slug(
         self,
@@ -251,7 +255,9 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             if trigger_read:
                 # Cache for future use
                 await self._cache_trigger(trigger_read, str(tenant_id))
-                return TriggerRead.model_validate(trigger_read) if not isinstance(trigger_read, TriggerRead) else trigger_read
+                if not isinstance(trigger_read, TriggerRead):
+                    return TriggerRead.model_validate(trigger_read)
+                return trigger_read
 
         return None
 
@@ -284,7 +290,9 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             if db_trigger and hasattr(db_trigger, "tenant_id"):
                 await self._cache_trigger(db_trigger, str(db_trigger.tenant_id))
 
-        return TriggerValidationResult.model_validate(result) if not isinstance(result, TriggerValidationResult) else result
+        if not isinstance(result, TriggerValidationResult):
+            return TriggerValidationResult.model_validate(result)
+        return result
 
     async def test_trigger(
         self,
@@ -338,7 +346,9 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             # Update cache
             await self._cache_trigger(db_trigger, str(tenant_id))
 
-        return TriggerRead.model_validate(db_trigger) if db_trigger and not isinstance(db_trigger, TriggerRead) else db_trigger
+        if db_trigger and not isinstance(db_trigger, TriggerRead):
+            return TriggerRead.model_validate(db_trigger)
+        return db_trigger  # type: ignore[no-any-return]
 
     async def deactivate_trigger(
         self,
@@ -372,7 +382,9 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             # Update cache
             await self._cache_trigger(db_trigger, str(tenant_id))
 
-        return TriggerRead.model_validate(db_trigger) if db_trigger and not isinstance(db_trigger, TriggerRead) else db_trigger
+        if db_trigger and not isinstance(db_trigger, TriggerRead):
+            return TriggerRead.model_validate(db_trigger)
+        return db_trigger  # type: ignore[no-any-return]
 
     async def get_active_triggers_by_type(
         self,
@@ -413,7 +425,7 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             tenant_id: Tenant ID
         """
         cache_key = self.get_cache_key(str(trigger.id), tenant_id=tenant_id)
-        await RedisClient.set(
+        await redis_client.set(
             cache_key,
             trigger.model_dump_json(),
             expiration=self.get_cache_ttl()
@@ -431,7 +443,7 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             tenant_id: Tenant ID
         """
         cache_key = self.get_cache_key(trigger_id, tenant_id=tenant_id)
-        await RedisClient.delete(cache_key)
+        await redis_client.delete(cache_key)
 
     async def bulk_cache_triggers(
         self,
@@ -452,10 +464,14 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             tenant_id = uuid_pkg.UUID(tenant_id)
 
         # Get all triggers for tenant
-        triggers = await self.crud_trigger.get_multi(
+        triggers_result = await self.crud_trigger.get_multi(
             db=db,
             filters={"tenant_id": tenant_id}
         )
+
+        # Extract data from result
+        triggers = triggers_result.get("data", []) if isinstance(
+            triggers_result, dict) else []
 
         cached_count = 0
         for trigger in triggers:
@@ -471,4 +487,5 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
 
 
 # Export service instance
-trigger_service = TriggerService()
+
+trigger_service = TriggerService(crud_trigger)
