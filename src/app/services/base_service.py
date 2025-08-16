@@ -79,7 +79,8 @@ class BaseService(ABC, Generic[ModelType, CreateSchemaType, UpdateSchemaType, Re
                 cache_key = self.get_cache_key(str(entity.id), **kwargs)
 
             # Convert to schema and serialize
-            entity_dict = self.read_schema.model_validate(entity).model_dump_json()
+            entity_dict = self.read_schema.model_validate(
+                entity).model_dump_json()
 
             # Cache with TTL
             await RedisClient.set(cache_key, entity_dict, expiration=self.get_cache_ttl())
@@ -155,7 +156,8 @@ class BaseService(ABC, Generic[ModelType, CreateSchemaType, UpdateSchemaType, Re
         """
         try:
             count = await RedisClient.delete_pattern(pattern)
-            logger.info(f"Invalidated {count} cache keys matching pattern: {pattern}")
+            logger.info(
+                f"Invalidated {count} cache keys matching pattern: {pattern}")
             return count
         except Exception as e:
             logger.error(f"Failed to invalidate pattern {pattern}: {e}")
