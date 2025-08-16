@@ -256,8 +256,7 @@ class RedisClient:
                     value = value.encode('utf-8')
                 encoded_values.append(value)
             # redis-py has incomplete async type hints
-            # type: ignore[misc]
-            result = await client.lpush(key, *encoded_values)
+            result = await client.lpush(key, *encoded_values)  # type: ignore[misc]
             return int(result) if result else 0
         except RedisError as e:
             logger.error(f"Redis LPUSH error for key {key}: {e}")
@@ -278,8 +277,7 @@ class RedisClient:
         try:
             client = cls.get_client()
             # redis-py has incomplete async type hints
-            # type: ignore[misc]
-            values = await client.lrange(key, start, stop)
+            values = await client.lrange(key, start, stop)  # type: ignore[misc]
             result = []
             for value in values:
                 try:
@@ -314,8 +312,7 @@ class RedisClient:
                     member = member.encode('utf-8')
                 encoded_members.append(member)
             # redis-py has incomplete async type hints
-            # type: ignore[misc]
-            result = await client.sadd(key, *encoded_members)
+            result = await client.sadd(key, *encoded_members)  # type: ignore[misc]
             return int(result) if result else 0
         except RedisError as e:
             logger.error(f"Redis SADD error for key {key}: {e}")
@@ -369,8 +366,7 @@ class RedisClient:
                     member = member.encode('utf-8')
                 encoded_members.append(member)
             # redis-py has incomplete async type hints
-            # type: ignore[misc]
-            result = await client.srem(key, *encoded_members)
+            result = await client.srem(key, *encoded_members)  # type: ignore[misc]
             return int(result) if result else 0
         except RedisError as e:
             logger.error(f"Redis SREM error for key {key}: {e}")
