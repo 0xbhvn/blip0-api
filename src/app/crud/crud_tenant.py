@@ -381,6 +381,25 @@ class CRUDTenant(
 
         return None
 
+    async def get_by_slug(
+        self,
+        db: AsyncSession,
+        slug: str
+    ) -> Optional[Tenant]:
+        """
+        Get tenant by slug.
+
+        Args:
+            db: Database session
+            slug: Tenant slug
+
+        Returns:
+            Tenant if found, None otherwise
+        """
+        query = select(Tenant).where(Tenant.slug == slug)
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
     def _get_default_limits_for_plan(self, plan: str) -> dict[str, Any]:
         """
         Get default resource limits for a plan.

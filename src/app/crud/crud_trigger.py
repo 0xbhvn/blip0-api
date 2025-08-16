@@ -402,6 +402,30 @@ class CRUDTrigger(
             tenant_id
         )
 
+    async def get_by_slug(
+        self,
+        db: AsyncSession,
+        slug: str,
+        tenant_id: Any
+    ) -> Optional[Trigger]:
+        """
+        Get trigger by slug within tenant context.
+
+        Args:
+            db: Database session
+            slug: Trigger slug
+            tenant_id: Tenant ID for multi-tenant isolation
+
+        Returns:
+            Trigger if found and authorized, None otherwise
+        """
+        query = select(Trigger).where(
+            Trigger.slug == slug,
+            Trigger.tenant_id == tenant_id
+        )
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
     async def bulk_validate(
         self,
         db: AsyncSession,

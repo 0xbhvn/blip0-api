@@ -223,6 +223,30 @@ class CRUDMonitor(
         monitor_dict["triggers_data"] = triggers_data
         return MonitorCached(**monitor_dict)
 
+    async def get_by_slug(
+        self,
+        db: AsyncSession,
+        slug: str,
+        tenant_id: Any
+    ) -> Optional[Monitor]:
+        """
+        Get monitor by slug within tenant context.
+
+        Args:
+            db: Database session
+            slug: Monitor slug
+            tenant_id: Tenant ID for multi-tenant isolation
+
+        Returns:
+            Monitor if found and authorized, None otherwise
+        """
+        query = select(Monitor).where(
+            Monitor.slug == slug,
+            Monitor.tenant_id == tenant_id
+        )
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
     async def validate_monitor(
         self,
         db: AsyncSession,

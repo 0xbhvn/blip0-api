@@ -95,6 +95,25 @@ class CRUDNetwork(
 
         return NetworkRead.model_validate(network)
 
+    async def get_by_slug(
+        self,
+        db: AsyncSession,
+        slug: str
+    ) -> Optional[Network]:
+        """
+        Get network by slug.
+
+        Args:
+            db: Database session
+            slug: Network slug
+
+        Returns:
+            Network if found, None otherwise
+        """
+        query = select(Network).where(Network.slug == slug)
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
     async def validate_network(
         self,
         db: AsyncSession,
