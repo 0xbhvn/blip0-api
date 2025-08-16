@@ -272,8 +272,18 @@ class TestTenantService:
             plan=sample_tenant_db.plan,
             settings=sample_tenant_db.settings,
             status=sample_tenant_db.status,
-            description=sample_tenant_update.description if hasattr(sample_tenant_update, 'description') and sample_tenant_update.description is not None else getattr(sample_tenant_db, 'description', None),
-            is_active=sample_tenant_update.is_active if hasattr(sample_tenant_update, 'is_active') and sample_tenant_update.is_active is not None else sample_tenant_db.is_active,
+            description=(
+                sample_tenant_update.description
+                if hasattr(sample_tenant_update, 'description')
+                and sample_tenant_update.description is not None
+                else getattr(sample_tenant_db, 'description', None)
+            ),
+            is_active=(
+                sample_tenant_update.is_active
+                if hasattr(sample_tenant_update, 'is_active')
+                and sample_tenant_update.is_active is not None
+                else sample_tenant_db.is_active
+            ),
             created_at=sample_tenant_db.created_at,
             updated_at=now
         )

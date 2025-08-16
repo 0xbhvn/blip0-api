@@ -247,8 +247,16 @@ class TestTriggerService:
             name=sample_trigger_update.name or sample_trigger_db.name,
             slug=sample_trigger_db.slug,
             trigger_type=sample_trigger_db.trigger_type,
-            description=sample_trigger_update.description if hasattr(sample_trigger_update, 'description') else sample_trigger_db.description,
-            active=sample_trigger_update.active if hasattr(sample_trigger_update, 'active') else sample_trigger_db.active,
+            description=(
+                sample_trigger_update.description
+                if hasattr(sample_trigger_update, 'description')
+                else sample_trigger_db.description
+            ),
+            active=(
+                sample_trigger_update.active
+                if hasattr(sample_trigger_update, 'active')
+                else sample_trigger_db.active
+            ),
             validated=sample_trigger_db.validated,
             validation_errors=sample_trigger_db.validation_errors,
             last_validated_at=sample_trigger_db.last_validated_at,
@@ -440,7 +448,10 @@ class TestTriggerService:
                 "active": sample_trigger_db.active,
                 "validated": sample_trigger_db.validated,
                 "validation_errors": sample_trigger_db.validation_errors,
-                "last_validated_at": sample_trigger_db.last_validated_at.isoformat() if sample_trigger_db.last_validated_at else None,
+                "last_validated_at": (
+                    sample_trigger_db.last_validated_at.isoformat()
+                    if sample_trigger_db.last_validated_at else None
+                ),
                 "created_at": sample_trigger_db.created_at.isoformat(),
                 "updated_at": sample_trigger_db.updated_at.isoformat() if sample_trigger_db.updated_at else None,
                 "email_config": None,
