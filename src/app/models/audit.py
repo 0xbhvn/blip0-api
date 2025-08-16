@@ -72,7 +72,7 @@ class BlockState(Base):
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -95,13 +95,13 @@ class BlockState(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         onupdate=lambda: datetime.now(UTC)
     )
@@ -161,7 +161,7 @@ class MissedBlock(Base):
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -184,7 +184,7 @@ class MissedBlock(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         comment="When this block was identified as missed"
     )
@@ -246,7 +246,7 @@ class MonitorMatch(Base):
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -269,7 +269,7 @@ class MonitorMatch(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         comment="When this match was detected"
     )
@@ -346,7 +346,7 @@ class TriggerExecution(Base):
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -363,7 +363,7 @@ class TriggerExecution(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         comment="When this execution was initiated"
     )

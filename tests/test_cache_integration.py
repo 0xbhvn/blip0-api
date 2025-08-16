@@ -8,8 +8,7 @@ test script to proper pytest structure with mocking.
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Set
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -30,7 +29,7 @@ class TestCacheIntegrationFixtures:
     def mock_redis_client(self):
         """Mock Redis client with full pub/sub capabilities."""
         mock_redis = AsyncMock()
-        
+
         # Basic operations
         mock_redis.get.return_value = None
         mock_redis.set.return_value = True
@@ -43,22 +42,22 @@ class TestCacheIntegrationFixtures:
         mock_redis.publish.return_value = 2  # Mock 2 subscribers
         mock_redis.delete_pattern.return_value = 5
         mock_redis.keys_pattern.return_value = []
-        
+
         # Pub/sub operations
         mock_pubsub = AsyncMock()
         mock_pubsub.subscribe = AsyncMock()
         mock_pubsub.listen = AsyncMock()
-        
+
         # Create a proper async context manager for pubsub
         class MockPubSubContextManager:
             async def __aenter__(self):
                 return mock_pubsub
-            
+
             async def __aexit__(self, exc_type, exc_val, exc_tb):
                 return None
-        
+
         mock_redis.pubsub = lambda: MockPubSubContextManager()
-        
+
         return mock_redis
 
     @pytest.fixture
@@ -98,9 +97,9 @@ class TestCacheIntegrationFixtures:
         monitor.match_transactions = []
         monitor.trigger_conditions = []
         monitor.triggers = []
-        monitor.created_at = datetime.now(timezone.utc)
-        monitor.updated_at = datetime.now(timezone.utc)
-        monitor.last_validated_at = datetime.now(timezone.utc)
+        monitor.created_at = datetime.now(UTC)
+        monitor.updated_at = datetime.now(UTC)
+        monitor.last_validated_at = datetime.now(UTC)
 
         return monitor
 
@@ -128,9 +127,9 @@ class TestCacheIntegrationFixtures:
         network.active = True
         network.validated = True
         network.validation_errors = None
-        network.created_at = datetime.now(timezone.utc)
-        network.updated_at = datetime.now(timezone.utc)
-        network.last_validated_at = datetime.now(timezone.utc)
+        network.created_at = datetime.now(UTC)
+        network.updated_at = datetime.now(UTC)
+        network.last_validated_at = datetime.now(UTC)
 
         return network
 
@@ -150,9 +149,9 @@ class TestCacheIntegrationFixtures:
         trigger.active = True
         trigger.validated = True
         trigger.validation_errors = None
-        trigger.created_at = datetime.now(timezone.utc)
-        trigger.updated_at = datetime.now(timezone.utc)
-        trigger.last_validated_at = datetime.now(timezone.utc)
+        trigger.created_at = datetime.now(UTC)
+        trigger.updated_at = datetime.now(UTC)
+        trigger.last_validated_at = datetime.now(UTC)
 
         return trigger
 
@@ -193,7 +192,7 @@ class TestPubSubIntegration(TestCacheIntegrationFixtures):
             "resource_type": CacheResourceType.MONITOR.value,
             "resource_id": str(uuid.uuid4()),
             "tenant_id": str(uuid.uuid4()),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "metadata": {"test": "data"}
         }
 
@@ -207,10 +206,10 @@ class TestPubSubIntegration(TestCacheIntegrationFixtures):
         # Test event parsing
         channel_name = mock_message['channel'].decode('utf-8')
         data = mock_message['data']
-        
+
         if isinstance(data, bytes):
             data = data.decode('utf-8')
-        
+
         event = json.loads(data)
 
         # Verify event structure
@@ -231,21 +230,21 @@ class TestPubSubIntegration(TestCacheIntegrationFixtures):
                 "resource_type": CacheResourceType.MONITOR.value,
                 "resource_id": str(uuid.uuid4()),
                 "tenant_id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
             {
                 "event_type": CacheEventType.DELETE.value,
                 "resource_type": CacheResourceType.NETWORK.value,
                 "resource_id": str(uuid.uuid4()),
                 "tenant_id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
             {
                 "event_type": CacheEventType.INVALIDATE.value,
                 "resource_type": CacheResourceType.TENANT.value,
                 "resource_id": str(uuid.uuid4()),
                 "tenant_id": str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         ]
 
@@ -263,7 +262,7 @@ class TestPubSubIntegration(TestCacheIntegrationFixtures):
             data = mock_message['data']
             if isinstance(data, bytes):
                 data = data.decode('utf-8')
-            
+
             event = json.loads(data)
             processed_events.append(event)
 
@@ -289,11 +288,11 @@ class TestCacheOperationIntegration(TestCacheIntegrationFixtures):
 
         # Verify cache operation
         mock_redis_client.set.assert_called_once()
-        
+
         # Verify pub/sub event was published
         mock_redis_client.publish.assert_called_once()
         channel, event_data = mock_redis_client.publish.call_args[0]
-        
+
         # Verify event structure
         assert channel == CHANNELS["tenant_pattern"].format(tenant_id=sample_monitor.tenant_id)
         assert event_data["event_type"] == CacheEventType.UPDATE.value
@@ -314,7 +313,7 @@ class TestCacheOperationIntegration(TestCacheIntegrationFixtures):
         # Verify pub/sub event was published
         mock_redis_client.publish.assert_called_once()
         channel, event_data = mock_redis_client.publish.call_args[0]
-        
+
         # Verify event structure
         assert channel == CHANNELS["tenant_pattern"].format(tenant_id=sample_network.tenant_id)
         assert event_data["event_type"] == CacheEventType.UPDATE.value
@@ -335,7 +334,7 @@ class TestCacheOperationIntegration(TestCacheIntegrationFixtures):
         # Verify pub/sub event was published
         mock_redis_client.publish.assert_called_once()
         channel, event_data = mock_redis_client.publish.call_args[0]
-        
+
         # Verify event structure
         assert channel == CHANNELS["tenant_pattern"].format(tenant_id=sample_trigger.tenant_id)
         assert event_data["event_type"] == CacheEventType.UPDATE.value
@@ -353,10 +352,10 @@ class TestCacheOperationIntegration(TestCacheIntegrationFixtures):
         with patch("src.app.services.cache_service.redis_client", mock_redis_client):
             # Test monitor deletion
             await CacheService.delete_monitor(sample_tenant_id, monitor_id)
-            
+
             # Test network deletion
             await CacheService.delete_network(sample_tenant_id, network_id)
-            
+
             # Test trigger deletion
             await CacheService.delete_trigger(sample_tenant_id, trigger_id)
 
@@ -365,7 +364,7 @@ class TestCacheOperationIntegration(TestCacheIntegrationFixtures):
 
         # Check the events
         calls = mock_redis_client.publish.call_args_list
-        
+
         # Monitor delete event
         monitor_channel, monitor_event = calls[0][0]
         assert monitor_channel == CHANNELS["tenant_pattern"].format(tenant_id=sample_tenant_id)
@@ -386,7 +385,7 @@ class TestCacheOperationIntegration(TestCacheIntegrationFixtures):
         # Verify invalidation event was published
         mock_redis_client.publish.assert_called_once()
         channel, event_data = mock_redis_client.publish.call_args[0]
-        
+
         # Verify event structure
         assert channel == CHANNELS["tenant_pattern"].format(tenant_id=sample_tenant_id)
         assert event_data["event_type"] == CacheEventType.INVALIDATE.value
@@ -410,7 +409,7 @@ class TestFullIntegrationFlow(TestCacheIntegrationFixtures):
             monitor_result = await CacheService.cache_monitor(mock_async_db, sample_monitor)
             network_result = await CacheService.cache_network(sample_network)
             trigger_result = await CacheService.cache_trigger(mock_async_db, sample_trigger)
-            
+
             # Delete operations
             delete_monitor_result = await CacheService.delete_monitor(
                 sample_tenant_id, str(sample_monitor.id)
@@ -418,7 +417,7 @@ class TestFullIntegrationFlow(TestCacheIntegrationFixtures):
             delete_network_result = await CacheService.delete_network(
                 sample_tenant_id, str(sample_network.id)
             )
-            
+
             # Tenant invalidation
             invalidate_result = await CacheService.invalidate_tenant_cache(sample_tenant_id)
 
@@ -461,7 +460,7 @@ class TestFullIntegrationFlow(TestCacheIntegrationFixtures):
                 CacheService.cache_monitor(mock_async_db, monitor)
                 for monitor in monitors
             ]
-            
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Verify all operations succeeded
@@ -498,7 +497,7 @@ class TestFullIntegrationFlow(TestCacheIntegrationFixtures):
                 "data": b"invalid json"  # Invalid JSON
             },
             {
-                "type": "message", 
+                "type": "message",
                 "channel": b"test:channel",
                 "data": b'{"incomplete": "event"}'  # Missing required fields
             },
@@ -516,7 +515,7 @@ class TestFullIntegrationFlow(TestCacheIntegrationFixtures):
                     data = message['data']
                     if isinstance(data, bytes):
                         data = data.decode('utf-8')
-                    
+
                     # This should raise JSONDecodeError for invalid JSON
                     if data == "invalid json":
                         with pytest.raises(json.JSONDecodeError):
@@ -541,14 +540,14 @@ class TestChannelManagement(TestCacheIntegrationFixtures):
     async def test_tenant_specific_channel_routing(self, mock_redis_client, sample_tenant_id):
         """Test that events are routed to correct tenant-specific channels."""
         monitor_id = str(uuid.uuid4())
-        
+
         with patch("src.app.services.cache_service.redis_client", mock_redis_client):
             await CacheService.delete_monitor(sample_tenant_id, monitor_id)
 
         # Verify event was published to tenant-specific channel
         mock_redis_client.publish.assert_called_once()
         channel, _ = mock_redis_client.publish.call_args[0]
-        
+
         expected_channel = CHANNELS["tenant_pattern"].format(tenant_id=sample_tenant_id)
         assert channel == expected_channel
 
@@ -556,7 +555,7 @@ class TestChannelManagement(TestCacheIntegrationFixtures):
     async def test_platform_level_event_routing(self, mock_redis_client):
         """Test that platform-level events use correct channels."""
         resource_id = str(uuid.uuid4())
-        
+
         with patch("src.app.services.cache_service.redis_client", mock_redis_client):
             result = await CacheService._publish_cache_event(
                 event_type=CacheEventType.UPDATE,
@@ -565,11 +564,11 @@ class TestChannelManagement(TestCacheIntegrationFixtures):
             )
 
         assert result is True
-        
+
         # Verify event was published to platform channel
         mock_redis_client.publish.assert_called_once()
         channel, event_data = mock_redis_client.publish.call_args[0]
-        
+
         assert channel == CHANNELS["platform_update"]
         assert "tenant_id" not in event_data
 
@@ -577,13 +576,13 @@ class TestChannelManagement(TestCacheIntegrationFixtures):
         """Test that all required channels are defined."""
         required_channels = [
             "config_update",
-            "monitor_update", 
+            "monitor_update",
             "network_update",
             "trigger_update",
             "platform_update",
             "tenant_pattern"
         ]
-        
+
         for channel in required_channels:
             assert channel in CHANNELS
             assert isinstance(CHANNELS[channel], str)

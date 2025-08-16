@@ -65,14 +65,14 @@ class Network(Base):
     rpc_urls: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of RPC endpoints with url, type_, and weight"
     )
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -137,13 +137,13 @@ class Network(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         onupdate=lambda: datetime.now(UTC)
     )

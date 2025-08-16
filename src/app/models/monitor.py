@@ -29,7 +29,7 @@ class Monitor(Base):
 
     # Primary key with default
     id: Mapped[uuid_pkg.UUID] = mapped_column(
-        default=uuid_pkg.uuid4,
+        default_factory=uuid_pkg.uuid4,
         primary_key=True,
         unique=True
     )
@@ -47,14 +47,14 @@ class Monitor(Base):
     networks: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of network slugs this monitor watches"
     )
     addresses: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of address objects with optional contract specs"
     )
@@ -63,21 +63,21 @@ class Monitor(Base):
     match_functions: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of function conditions with signature and expression"
     )
     match_events: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of event conditions with signature and expression"
     )
     match_transactions: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of transaction conditions with optional status and expression"
     )
@@ -86,14 +86,14 @@ class Monitor(Base):
     trigger_conditions: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of filter scripts to apply before triggering"
     )
     triggers: Mapped[list] = mapped_column(
         JSON,
         nullable=False,
-        default=list,
+        default_factory=list,
         server_default="[]",
         comment="Array of trigger slugs to execute when conditions match"
     )
@@ -128,13 +128,13 @@ class Monitor(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default_factory=lambda: datetime.now(UTC),
         server_default="NOW()",
         onupdate=lambda: datetime.now(UTC)
     )

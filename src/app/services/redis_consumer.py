@@ -86,7 +86,8 @@ class RedisConfigConsumer:
                 # await self.remove_configuration(tenant_id, entity_type, entity_id)
 
         elif action == "invalidate_all":
-            logger.info(f"All configurations invalidated for tenant: {tenant_id}")
+            logger.info(
+                f"All configurations invalidated for tenant: {tenant_id}")
             # In oz-multi-tenant, this would trigger a full reload for the tenant
             # await self.reload_tenant_configuration(tenant_id)
 
@@ -184,7 +185,8 @@ class RedisConfigConsumer:
                                         f"Error in handler for channel {channel}: {e}"
                                     )
                             else:
-                                logger.warning(f"No handler for channel: {channel}")
+                                logger.warning(
+                                    f"No handler for channel: {channel}")
 
                     except TimeoutError:
                         # Timeout is normal, continue loop
@@ -249,10 +251,14 @@ async def example_oz_multi_tenant_consumer():
     consumer = RedisConfigConsumer()
 
     # Register handlers for different channels
-    consumer.register_handler("blip0:config:update", consumer.handle_config_update)
-    consumer.register_handler("blip0:monitor:update", consumer.handle_monitor_update)
-    consumer.register_handler("blip0:network:update", consumer.handle_network_update)
-    consumer.register_handler("blip0:trigger:update", consumer.handle_trigger_update)
+    consumer.register_handler("blip0:config:update",
+                              consumer.handle_config_update)
+    consumer.register_handler("blip0:monitor:update",
+                              consumer.handle_monitor_update)
+    consumer.register_handler("blip0:network:update",
+                              consumer.handle_network_update)
+    consumer.register_handler("blip0:trigger:update",
+                              consumer.handle_trigger_update)
 
     # Start consumer
     await consumer.start()
