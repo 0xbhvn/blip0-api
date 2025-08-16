@@ -100,3 +100,159 @@ def current_user_dict():
         "name": fake.name(),
         "is_superuser": False,
     }
+
+
+# Additional fixtures for service layer testing
+
+@pytest.fixture
+def mock_redis_client():
+    """Enhanced Redis client mock for service testing."""
+    mock_redis = Mock()
+
+    # Mock all Redis operations used by services
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.set = AsyncMock(return_value=True)
+    mock_redis.delete = AsyncMock(return_value=1)
+    mock_redis.delete_pattern = AsyncMock(return_value=1)
+    mock_redis.sadd = AsyncMock(return_value=1)
+    mock_redis.srem = AsyncMock(return_value=1)
+    mock_redis.smembers = AsyncMock(return_value=set())
+    mock_redis.expire = AsyncMock(return_value=True)
+
+    return mock_redis
+
+
+@pytest.fixture
+def sample_tenant_data():
+    """Generate sample tenant data for tests."""
+    import uuid
+    return {
+        "id": uuid.uuid4(),
+        "name": fake.company(),
+        "slug": fake.slug(),
+        "description": fake.text(max_nb_chars=100),
+        "is_active": True,
+        "created_at": fake.date_time(),
+        "updated_at": fake.date_time(),
+    }
+
+
+@pytest.fixture
+def sample_monitor_data():
+    """Generate sample monitor data for tests."""
+    import uuid
+    return {
+        "id": uuid.uuid4(),
+        "tenant_id": uuid.uuid4(),
+        "name": fake.name(),
+        "slug": fake.slug(),
+        "description": fake.text(max_nb_chars=100),
+        "paused": False,
+        "networks": ["ethereum", "polygon"],
+        "addresses": [{"address": "0x123", "type": "contract"}],
+        "match_functions": [{"signature": "transfer(address,uint256)"}],
+        "match_events": [{"signature": "Transfer(address,address,uint256)"}],
+        "match_transactions": [],
+        "trigger_conditions": [{"condition": "value > 1000"}],
+        "triggers": [],
+        "created_at": fake.date_time(),
+        "updated_at": fake.date_time(),
+    }
+
+
+@pytest.fixture
+def sample_network_data():
+    """Generate sample network data for tests."""
+    import uuid
+    return {
+        "id": uuid.uuid4(),
+        "name": fake.name(),
+        "slug": fake.slug(),
+        "chain_id": fake.random_int(min=1, max=999999),
+        "rpc_urls": [fake.url(), fake.url()],
+        "explorer_url": fake.url(),
+        "is_active": True,
+        "created_at": fake.date_time(),
+        "updated_at": fake.date_time(),
+    }
+
+
+@pytest.fixture
+def sample_trigger_data():
+    """Generate sample trigger data for tests."""
+    import uuid
+    return {
+        "id": uuid.uuid4(),
+        "tenant_id": uuid.uuid4(),
+        "monitor_id": uuid.uuid4(),
+        "name": fake.name(),
+        "slug": fake.slug(),
+        "trigger_type": "email",
+        "config": {"email": fake.email(), "subject": fake.sentence()},
+        "is_active": True,
+        "created_at": fake.date_time(),
+        "updated_at": fake.date_time(),
+    }
+
+
+@pytest.fixture
+def mock_crud_monitor():
+    """Mock CRUD operations for Monitor."""
+    mock_crud = Mock()
+    mock_crud.create = AsyncMock()
+    mock_crud.get = AsyncMock()
+    mock_crud.update = AsyncMock()
+    mock_crud.delete = AsyncMock()
+    mock_crud.get_paginated = AsyncMock()
+    mock_crud.get_multi = AsyncMock()
+    return mock_crud
+
+
+@pytest.fixture
+def mock_crud_tenant():
+    """Mock CRUD operations for Tenant."""
+    mock_crud = Mock()
+    mock_crud.create = AsyncMock()
+    mock_crud.get = AsyncMock()
+    mock_crud.update = AsyncMock()
+    mock_crud.delete = AsyncMock()
+    mock_crud.get_paginated = AsyncMock()
+    mock_crud.get_multi = AsyncMock()
+    mock_crud.get_by_slug = AsyncMock()
+    return mock_crud
+
+
+@pytest.fixture
+def mock_crud_network():
+    """Mock CRUD operations for Network."""
+    mock_crud = Mock()
+    mock_crud.create = AsyncMock()
+    mock_crud.get = AsyncMock()
+    mock_crud.update = AsyncMock()
+    mock_crud.delete = AsyncMock()
+    mock_crud.get_paginated = AsyncMock()
+    mock_crud.get_multi = AsyncMock()
+    mock_crud.get_by_slug = AsyncMock()
+    return mock_crud
+
+
+@pytest.fixture
+def mock_crud_trigger():
+    """Mock CRUD operations for Trigger."""
+    mock_crud = Mock()
+    mock_crud.create = AsyncMock()
+    mock_crud.get = AsyncMock()
+    mock_crud.update = AsyncMock()
+    mock_crud.delete = AsyncMock()
+    mock_crud.get_paginated = AsyncMock()
+    mock_crud.get_multi = AsyncMock()
+    mock_crud.get_by_slug = AsyncMock()
+    mock_crud.create_with_config = AsyncMock()
+    mock_crud.update_with_config = AsyncMock()
+    mock_crud._get_trigger_with_config = AsyncMock()
+    mock_crud.validate_trigger = AsyncMock()
+    mock_crud.test_trigger = AsyncMock()
+    mock_crud.activate_trigger = AsyncMock()
+    mock_crud.deactivate_trigger = AsyncMock()
+    mock_crud.get_active_triggers_by_type = AsyncMock()
+    return mock_crud
