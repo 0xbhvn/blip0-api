@@ -475,11 +475,11 @@ class TestUpdateMonitor:
     ):
         """Test monitor update with duplicate slug."""
         monitor_update = MonitorUpdate(slug="existing-slug")
-        
+
         # Create a different monitor with the same slug (different ID)
         different_monitor = sample_monitor_read.model_copy()
         different_monitor.id = uuid.uuid4()  # Different ID
-        
+
         # Mock that another monitor with this slug exists
         mock_monitor_service.list_monitors = AsyncMock(
             return_value={"total": 1, "items": [different_monitor]}
