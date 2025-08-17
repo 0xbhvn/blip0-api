@@ -41,6 +41,38 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
     Handles tenant management with Redis caching for configuration access.
     """
 
+    # Default plan limits configuration
+    DEFAULT_PLAN_LIMITS = {
+        "free": {
+            "monitors": 10,
+            "networks": 3,
+            "triggers": 20,
+            "api_calls": 1000,
+            "storage": 1.0
+        },
+        "starter": {
+            "monitors": 50,
+            "networks": 10,
+            "triggers": 100,
+            "api_calls": 10000,
+            "storage": 10.0
+        },
+        "pro": {
+            "monitors": 200,
+            "networks": 50,
+            "triggers": 500,
+            "api_calls": 100000,
+            "storage": 100.0
+        },
+        "enterprise": {
+            "monitors": 1000,
+            "networks": 200,
+            "triggers": 2000,
+            "api_calls": 1000000,
+            "storage": 1000.0
+        },
+    }
+
     def __init__(self, crud_tenant: CRUDTenant):
         """Initialize tenant service with CRUD dependency."""
         super().__init__(crud_tenant)
@@ -289,17 +321,24 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         return TenantRead.model_validate(db_tenant)
 
     # Redis caching helper methods
-    async def _cache_tenant(self, tenant: Any) -> None:
+    async def _cache_tenant(self, tenant: Union[Tenant, TenantRead, dict[str, Any]]) -> None:
         """Cache tenant configuration in Redis."""
         try:
-            key = f"tenant:{tenant.id}:config"
-            tenant_dict = TenantRead.model_validate(tenant).model_dump_json()
+            # Handle different types that might be passed
+            if isinstance(tenant, dict):
+                tenant_id = tenant.get('id')
+                tenant_dict = TenantRead.model_validate(tenant).model_dump_json()
+            else:
+                tenant_id = tenant.id
+                tenant_dict = TenantRead.model_validate(tenant).model_dump_json()
+
+            key = f"tenant:{tenant_id}:config"
 
             # Cache for 1 hour (3600 seconds)
             # oz-multi-tenant refreshes every 30 seconds but cache TTL is longer
             await redis_client.set(key, tenant_dict, expiration=3600)
         except Exception as e:
-            logger.error(f"Failed to cache tenant {tenant.id}: {e}")
+            logger.error(f"Failed to cache tenant {tenant_id}: {e}")
 
     async def _get_cached_tenant(self, tenant_id: str) -> Optional[TenantRead]:
         """Get tenant from cache."""
@@ -504,18 +543,8 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         # Get limits (use defaults if not set)
         limits = tenant.limits if hasattr(tenant, 'limits') and tenant.limits else None
 
-        # Default limits based on plan
-        default_limits = {
-            "free": {"monitors": 10, "networks": 3, "triggers": 20, "api_calls": 1000, "storage": 1.0},
-            "starter": {"monitors": 50, "networks": 10, "triggers": 100, "api_calls": 10000, "storage": 10.0},
-            "pro": {"monitors": 200, "networks": 50, "triggers": 500, "api_calls": 100000, "storage": 100.0},
-            "enterprise": {
-                "monitors": 1000, "networks": 200, "triggers": 2000,
-                "api_calls": 1000000, "storage": 1000.0
-            },
-        }
-
-        plan_limits = default_limits.get(tenant.plan, default_limits["free"])
+        # Use class constant for default limits
+        plan_limits = self.DEFAULT_PLAN_LIMITS.get(tenant.plan, self.DEFAULT_PLAN_LIMITS["free"])
 
         monitors_limit = int(limits.max_monitors) if limits else int(plan_limits["monitors"])
         networks_limit = int(limits.max_networks) if limits else int(plan_limits["networks"])
@@ -597,27 +626,16 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         if not tenant:
             return None
 
-        # Create default limits based on plan
-        default_limits = {
-            "free": {
-                "max_monitors": 10, "max_networks": 3, "max_triggers": 20,
-                "max_api_calls_per_hour": 1000, "max_storage_gb": 1.0
-            },
-            "starter": {
-                "max_monitors": 50, "max_networks": 10, "max_triggers": 100,
-                "max_api_calls_per_hour": 10000, "max_storage_gb": 10.0
-            },
-            "pro": {
-                "max_monitors": 200, "max_networks": 50, "max_triggers": 500,
-                "max_api_calls_per_hour": 100000, "max_storage_gb": 100.0
-            },
-            "enterprise": {
-                "max_monitors": 1000, "max_networks": 200, "max_triggers": 2000,
-                "max_api_calls_per_hour": 1000000, "max_storage_gb": 1000.0
-            },
+        # Use class constant for default limits
+        # Note: Keys differ here (max_ prefix) for TenantLimitsRead compatibility
+        plan_limits_raw = self.DEFAULT_PLAN_LIMITS.get(tenant.plan, self.DEFAULT_PLAN_LIMITS["free"])
+        plan_limits = {
+            "max_monitors": plan_limits_raw["monitors"],
+            "max_networks": plan_limits_raw["networks"],
+            "max_triggers": plan_limits_raw["triggers"],
+            "max_api_calls_per_hour": plan_limits_raw["api_calls"],
+            "max_storage_gb": plan_limits_raw["storage"],
         }
-
-        plan_limits = default_limits.get(tenant.plan, default_limits["free"])
 
         return TenantLimitsRead(
             tenant_id=tenant_id_uuid,
