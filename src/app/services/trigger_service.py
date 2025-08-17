@@ -435,7 +435,7 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
         Returns:
             Paginated response with triggers
         """
-        result = await self.crud_trigger.get_paginated(
+        result: dict[str, Any] = await self.crud_trigger.get_paginated(
             db=db,
             page=page,
             size=size,
