@@ -5,20 +5,29 @@ Manages multi-tenant isolation and configuration.
 
 import json
 import uuid as uuid_pkg
+from datetime import UTC, datetime
 from typing import Any, Optional, Union
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logger import logging
 from ..core.redis_client import redis_client
 from ..crud.crud_tenant import CRUDTenant, crud_tenant
 from ..schemas.tenant import (
+    TenantActivateRequest,
+    TenantAdminPagination,
+    TenantAdminRead,
     TenantCreate,
     TenantCreateInternal,
     TenantFilter,
+    TenantLimitsRead,
     TenantRead,
+    TenantSelfServiceUpdate,
     TenantSort,
+    TenantSuspendRequest,
     TenantUpdate,
+    TenantUsageStats,
 )
 
 logger = logging.getLogger(__name__)
@@ -342,6 +351,359 @@ class TenantService:
             pass
 
         return stats
+
+    async def suspend_tenant(
+        self,
+        db: AsyncSession,
+        tenant_id: Union[str, uuid_pkg.UUID],
+        request: TenantSuspendRequest,
+    ) -> Optional[TenantRead]:
+        """
+        Suspend a tenant.
+
+        Args:
+            db: Database session
+            tenant_id: Tenant ID
+            request: Suspension request details
+
+        Returns:
+            Updated tenant if found
+        """
+        tenant_update = TenantUpdate(
+            status="suspended",
+            name=None,
+            slug=None,
+            settings={"suspension_reason": request.reason, "suspended_at": datetime.now(UTC).isoformat()}
+            if request.reason else {"suspended_at": datetime.now(UTC).isoformat()}
+        )
+
+        updated_tenant = await self.update_tenant(db, tenant_id, tenant_update)
+
+        if updated_tenant and request.notify_users:
+            # TODO: Implement user notification logic
+            logger.info(f"Would notify users of tenant {tenant_id} about suspension")
+
+        return updated_tenant
+
+    async def activate_tenant(
+        self,
+        db: AsyncSession,
+        tenant_id: Union[str, uuid_pkg.UUID],
+        request: TenantActivateRequest,
+    ) -> Optional[TenantRead]:
+        """
+        Activate a suspended tenant.
+
+        Args:
+            db: Database session
+            tenant_id: Tenant ID
+            request: Activation request details
+
+        Returns:
+            Updated tenant if found
+        """
+        tenant_update = TenantUpdate(
+            status="active",
+            name=None,
+            slug=None,
+            settings={"activation_reason": request.reason, "activated_at": datetime.now(UTC).isoformat()}
+            if request.reason else {"activated_at": datetime.now(UTC).isoformat()}
+        )
+
+        updated_tenant = await self.update_tenant(db, tenant_id, tenant_update)
+
+        if updated_tenant and request.notify_users:
+            # TODO: Implement user notification logic
+            logger.info(f"Would notify users of tenant {tenant_id} about activation")
+
+        return updated_tenant
+
+    async def get_tenant_usage(
+        self,
+        db: AsyncSession,
+        tenant_id: Union[str, uuid_pkg.UUID],
+    ) -> Optional[TenantUsageStats]:
+        """
+        Get detailed usage statistics for a tenant.
+
+        Args:
+            db: Database session
+            tenant_id: Tenant ID
+
+        Returns:
+            Tenant usage statistics
+        """
+        from ..models.monitor import Monitor
+        from ..models.trigger import Trigger
+
+        tenant_id_uuid = uuid_pkg.UUID(str(tenant_id)) if isinstance(tenant_id, str) else tenant_id
+
+        # Get tenant with limits
+        tenant = await self.crud_tenant.get_with_limits(db, tenant_id_uuid)
+        if not tenant:
+            return None
+
+        # Get current counts from database
+        monitor_count_query = select(func.count(Monitor.id)).where(
+            Monitor.tenant_id == tenant_id_uuid,
+            Monitor.active == True  # noqa: E712
+        )
+        trigger_count_query = select(func.count(Trigger.id)).where(
+            Trigger.tenant_id == tenant_id_uuid,
+            Trigger.active == True  # noqa: E712
+        )
+
+        monitor_count_result = await db.execute(monitor_count_query)
+        monitor_count = monitor_count_result.scalar() or 0
+
+        trigger_count_result = await db.execute(trigger_count_query)
+        trigger_count = trigger_count_result.scalar() or 0
+
+        # Get API calls from Redis (last hour)
+        api_calls_key = f"tenant:{tenant_id}:api_calls:hour"
+        try:
+            api_calls = await redis_client.get(api_calls_key)
+            api_calls_last_hour = int(api_calls) if api_calls else 0
+        except Exception:
+            api_calls_last_hour = 0
+
+        # Get limits (use defaults if not set)
+        limits = tenant.limits if hasattr(tenant, 'limits') and tenant.limits else None
+
+        # Default limits based on plan
+        default_limits = {
+            "free": {"monitors": 10, "networks": 3, "triggers": 20, "api_calls": 1000, "storage": 1.0},
+            "starter": {"monitors": 50, "networks": 10, "triggers": 100, "api_calls": 10000, "storage": 10.0},
+            "pro": {"monitors": 200, "networks": 50, "triggers": 500, "api_calls": 100000, "storage": 100.0},
+            "enterprise": {
+                "monitors": 1000, "networks": 200, "triggers": 2000,
+                "api_calls": 1000000, "storage": 1000.0
+            },
+        }
+
+        plan_limits = default_limits.get(tenant.plan, default_limits["free"])
+
+        monitors_limit = int(limits.max_monitors) if limits else int(plan_limits["monitors"])
+        networks_limit = int(limits.max_networks) if limits else int(plan_limits["networks"])
+        triggers_limit = int(limits.max_triggers) if limits else int(plan_limits["triggers"])
+        api_calls_limit = int(limits.max_api_calls_per_hour) if limits else int(plan_limits["api_calls"])
+        storage_limit = float(limits.max_storage_gb) if limits else float(plan_limits["storage"])
+
+        # Calculate current storage (placeholder - would need actual calculation)
+        storage_used = float(limits.current_storage_gb) if limits and hasattr(limits, 'current_storage_gb') else 0.0
+
+        # Calculate remaining quotas
+        monitors_remaining = max(0, monitors_limit - monitor_count)
+        triggers_remaining = max(0, triggers_limit - trigger_count)
+        api_calls_remaining = max(0, api_calls_limit - api_calls_last_hour)
+        storage_remaining = max(0.0, storage_limit - storage_used)
+
+        # Calculate usage percentages
+        def calc_percent(used: float, limit: float) -> float:
+            return min(100.0, (used / limit * 100) if limit > 0 else 0.0)
+
+        return TenantUsageStats(
+            tenant_id=tenant_id_uuid,
+            # Current usage
+            monitors_count=monitor_count,
+            networks_count=0,  # TODO: Implement network counting
+            triggers_count=trigger_count,
+            storage_gb_used=storage_used,
+            api_calls_last_hour=api_calls_last_hour,
+            # Limits
+            monitors_limit=monitors_limit,
+            networks_limit=networks_limit,
+            triggers_limit=triggers_limit,
+            storage_gb_limit=storage_limit,
+            api_calls_per_hour_limit=api_calls_limit,
+            # Remaining
+            monitors_remaining=monitors_remaining,
+            networks_remaining=networks_limit,  # TODO: Calculate actual remaining
+            triggers_remaining=triggers_remaining,
+            storage_gb_remaining=storage_remaining,
+            api_calls_remaining=api_calls_remaining,
+            # Percentages
+            monitors_usage_percent=calc_percent(monitor_count, monitors_limit),
+            networks_usage_percent=0.0,  # TODO: Calculate actual percentage
+            triggers_usage_percent=calc_percent(trigger_count, triggers_limit),
+            storage_usage_percent=calc_percent(storage_used, storage_limit),
+            api_calls_usage_percent=calc_percent(api_calls_last_hour, api_calls_limit),
+            calculated_at=datetime.now(UTC),
+        )
+
+    async def get_tenant_limits(
+        self,
+        db: AsyncSession,
+        tenant_id: Union[str, uuid_pkg.UUID],
+    ) -> Optional[TenantLimitsRead]:
+        """
+        Get tenant limits and quotas.
+
+        Args:
+            db: Database session
+            tenant_id: Tenant ID
+
+        Returns:
+            Tenant limits if found
+        """
+        from ..models.tenant import TenantLimits
+
+        tenant_id_uuid = uuid_pkg.UUID(str(tenant_id)) if isinstance(tenant_id, str) else tenant_id
+
+        # Get limits from database
+        limits_query = select(TenantLimits).where(TenantLimits.tenant_id == tenant_id_uuid)
+        result = await db.execute(limits_query)
+        limits = result.scalar_one_or_none()
+
+        if limits:
+            return TenantLimitsRead.model_validate(limits)
+
+        # Return default limits based on tenant plan
+        tenant = await self.get_tenant(db, tenant_id)
+        if not tenant:
+            return None
+
+        # Create default limits based on plan
+        default_limits = {
+            "free": {
+                "max_monitors": 10, "max_networks": 3, "max_triggers": 20,
+                "max_api_calls_per_hour": 1000, "max_storage_gb": 1.0
+            },
+            "starter": {
+                "max_monitors": 50, "max_networks": 10, "max_triggers": 100,
+                "max_api_calls_per_hour": 10000, "max_storage_gb": 10.0
+            },
+            "pro": {
+                "max_monitors": 200, "max_networks": 50, "max_triggers": 500,
+                "max_api_calls_per_hour": 100000, "max_storage_gb": 100.0
+            },
+            "enterprise": {
+                "max_monitors": 1000, "max_networks": 200, "max_triggers": 2000,
+                "max_api_calls_per_hour": 1000000, "max_storage_gb": 1000.0
+            },
+        }
+
+        plan_limits = default_limits.get(tenant.plan, default_limits["free"])
+
+        return TenantLimitsRead(
+            tenant_id=tenant_id_uuid,
+            max_monitors=int(plan_limits["max_monitors"]),
+            max_networks=int(plan_limits["max_networks"]),
+            max_triggers=int(plan_limits["max_triggers"]),
+            max_api_calls_per_hour=int(plan_limits["max_api_calls_per_hour"]),
+            max_storage_gb=float(plan_limits["max_storage_gb"]),
+            max_concurrent_operations=10,
+            current_monitors=0,
+            current_networks=0,
+            current_triggers=0,
+            current_storage_gb=0.0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+
+    async def update_tenant_self_service(
+        self,
+        db: AsyncSession,
+        tenant_id: Union[str, uuid_pkg.UUID],
+        update_data: TenantSelfServiceUpdate,
+    ) -> Optional[TenantRead]:
+        """
+        Update tenant with limited self-service fields.
+
+        Args:
+            db: Database session
+            tenant_id: Tenant ID
+            update_data: Self-service update data
+
+        Returns:
+            Updated tenant if found
+        """
+        # Convert to regular update but only with allowed fields
+        tenant_update = TenantUpdate(
+            name=update_data.name,
+            slug=None,
+            settings=update_data.settings,
+        )
+
+        return await self.update_tenant(db, tenant_id, tenant_update)
+
+    async def list_all_tenants(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        size: int = 50,
+        filters: Optional[TenantFilter] = None,
+        sort: Optional[TenantSort] = None,
+    ) -> TenantAdminPagination:
+        """
+        List all tenants for admin with enhanced information.
+
+        Args:
+            db: Database session
+            page: Page number
+            size: Page size
+            filters: Filter criteria
+            sort: Sort criteria
+
+        Returns:
+            Paginated tenant list with admin details
+        """
+        from ..models.monitor import Monitor
+        from ..models.trigger import Trigger
+        from ..models.user import User
+
+        # Get base pagination
+        result = await self.list_tenants(db, page, size, filters, sort)
+
+        # Enhance with admin information for each tenant
+        enhanced_items = []
+        for tenant in result["items"]:
+            # Get additional counts
+            user_count_query = select(func.count(User.id)).where(
+                User.tenant_id == tenant.id,
+                ~User.is_deleted
+            )
+            monitor_count_query = select(func.count(Monitor.id)).where(
+                Monitor.tenant_id == tenant.id,
+                Monitor.active == True  # noqa: E712
+            )
+            trigger_count_query = select(func.count(Trigger.id)).where(
+                Trigger.tenant_id == tenant.id,
+                Trigger.active == True  # noqa: E712
+            )
+
+            user_count_result = await db.execute(user_count_query)
+            user_count = user_count_result.scalar() or 0
+
+            monitor_count_result = await db.execute(monitor_count_query)
+            monitor_count = monitor_count_result.scalar() or 0
+
+            trigger_count_result = await db.execute(trigger_count_query)
+            trigger_count = trigger_count_result.scalar() or 0
+
+            # Get limits
+            limits = await self.get_tenant_limits(db, tenant.id)
+
+            # Create admin read schema
+            admin_tenant = TenantAdminRead(
+                **tenant.model_dump(),
+                limits=limits,
+                user_count=user_count,
+                monitor_count=monitor_count,
+                trigger_count=trigger_count,
+                last_activity=None,  # TODO: Track last activity
+                suspended_at=tenant.settings.get("suspended_at") if tenant.settings else None,
+                suspension_reason=tenant.settings.get("suspension_reason") if tenant.settings else None,
+            )
+            enhanced_items.append(admin_tenant)
+
+        return TenantAdminPagination(
+            items=enhanced_items,
+            total=result["total"],
+            page=result["page"],
+            size=result["size"],
+            pages=result["pages"],
+        )
 
 
 # Export service instance

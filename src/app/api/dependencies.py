@@ -72,6 +72,32 @@ async def get_current_superuser(current_user: Annotated[dict, Depends(get_curren
     return current_user
 
 
+async def get_current_admin(current_user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """Check if current user is an admin (superuser or has admin role)."""
+    # For now, admin is same as superuser. In future, could check for admin role
+    if not current_user.get("is_superuser", False):
+        # Could also check for admin role in tenant settings
+        # Example: tenant_settings = current_user.get("tenant_settings", {})
+        # if not tenant_settings.get("is_admin", False):
+        raise ForbiddenException("Admin privileges required.")
+
+    return current_user
+
+
+async def get_tenant_context(
+    current_user: Annotated[dict, Depends(get_current_user)]
+) -> str:
+    """Get tenant context from current user.
+
+    Ensures the user has a tenant association and returns the tenant_id.
+    This middleware helps enforce tenant isolation across all endpoints.
+    """
+    if not current_user.get("tenant_id"):
+        raise ForbiddenException("User is not associated with any tenant")
+
+    return str(current_user["tenant_id"])
+
+
 async def rate_limiter_dependency(
     request: Request, db: Annotated[AsyncSession, Depends(async_get_db)], user: dict | None = Depends(get_optional_user)
 ) -> None:
