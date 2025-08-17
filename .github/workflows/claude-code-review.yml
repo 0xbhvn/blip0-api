@@ -38,21 +38,34 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
-          # model: "claude-opus-4-1-20250805"
+          model: "claude-opus-4-1-20250805"
 
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            Review this Python/FastAPI pull request focusing on:
             
-            Be constructive and helpful in your feedback.
+            ## Code Quality
+            - For API endpoints: Proper async/await usage, tenant isolation, rate limiting
+            - For services: Redis caching implementation, write-through patterns
+            - For CRUD operations: FastCRUD usage, proper transaction handling
+            - For schemas: Pydantic validation, proper use of Optional types
+            - For tests: pytest fixtures, async test patterns, mock usage
+            
+            ## Security & Performance
+            - Security: No hardcoded secrets, proper authentication checks, SQL injection prevention
+            - Performance: N+1 query prevention, efficient database queries
+            - Redis patterns: Proper cache key generation, TTL settings
+            
+            ## Project Standards
+            - Follow patterns established in existing code (monitors.py, triggers.py)
+            - Check compliance with conventions in CLAUDE.md
+            - Ensure multi-tenant isolation is maintained
+            - Verify error handling follows project patterns (http_exceptions.py)
+            
+            Be constructive and suggest specific code improvements with examples.
 
-          # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
-          # use_sticky_comment: true
+          # Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
+          use_sticky_comment: true
           
           # Optional: Customize review based on file types
           # direct_prompt: |
@@ -68,11 +81,20 @@ jobs:
           #   'Welcome! Please review this PR from a first-time contributor. Be encouraging and provide detailed explanations for any suggestions.' ||
           #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
           
-          # Optional: Add specific tools for running tests or linting
-          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
+          # Add specific tools for running tests or linting
+          allowed_tools: "Bash(make test),Bash(make lint),Bash(make mypy),Bash(make coverage)"
           
-          # Optional: Skip review for certain conditions
-          # if: |
-          #   !contains(github.event.pull_request.title, '[skip-review]') &&
-          #   !contains(github.event.pull_request.title, '[WIP]')
+          # Custom instructions for project context
+          custom_instructions: |
+            This is a FastAPI project using:
+            - SQLAlchemy with async sessions (asyncpg)
+            - Redis for write-through caching (30-second refresh)
+            - Multi-tenant architecture with row-level security
+            - ARQ for background job processing
+            
+            Key patterns to enforce:
+            - Constants for state updates (e.g., ENABLE_TRIGGER_UPDATE)
+            - Service layer with BaseService for caching
+            - Comprehensive error handling with custom exceptions
+            - Type hints everywhere (mypy strict mode)
 
