@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...api.dependencies import get_current_admin
+from ...api.dependencies import get_current_admin, rate_limiter_dependency
 from ...core.db.database import async_get_db
 from ...core.exceptions.http_exceptions import (
     BadRequestException,
@@ -47,6 +47,7 @@ async def list_tenants(
     _request: Request,
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(50, ge=1, le=100, description="Page size"),
     # Filter parameters
@@ -98,6 +99,7 @@ async def create_tenant(
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
     tenant_in: TenantCreate,
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantWithLimits:
     """
     Create a new tenant with default limits based on plan.
@@ -140,6 +142,7 @@ async def get_tenant(
     tenant_id: str,
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantAdminRead:
     """
     Get detailed tenant information including usage statistics.
@@ -214,6 +217,7 @@ async def update_tenant(
     tenant_update: TenantUpdate,
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantRead:
     """
     Update tenant information.
@@ -264,6 +268,7 @@ async def delete_tenant(
     tenant_id: str,
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
     is_hard_delete: bool = Query(False, description="If true, permanently delete the tenant"),
 ) -> None:
     """
@@ -312,6 +317,7 @@ async def suspend_tenant(
     suspend_request: TenantSuspendRequest,
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantRead:
     """
     Suspend a tenant, preventing all operations.
@@ -362,6 +368,7 @@ async def activate_tenant(
     activate_request: TenantActivateRequest,
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantRead:
     """
     Activate a suspended tenant, restoring all operations.

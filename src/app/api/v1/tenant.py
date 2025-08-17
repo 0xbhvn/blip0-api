@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...api.dependencies import get_current_user, get_tenant_context
+from ...api.dependencies import get_current_user, get_tenant_context, rate_limiter_dependency
 from ...core.db.database import async_get_db
 from ...core.exceptions.http_exceptions import (
     BadRequestException,
@@ -40,6 +40,7 @@ async def get_current_tenant(
     db: Annotated[AsyncSession, Depends(async_get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_context)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantWithLimits:
     """
     Get current tenant information including limits.
@@ -71,6 +72,7 @@ async def update_current_tenant(
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_context)],
     update_data: TenantSelfServiceUpdate,
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantRead:
     """
     Update current tenant settings (limited fields).
@@ -122,6 +124,7 @@ async def get_tenant_usage(
     db: Annotated[AsyncSession, Depends(async_get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_context)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantUsageStats:
     """
     Get current tenant usage statistics.
@@ -157,6 +160,7 @@ async def get_tenant_limits(
     db: Annotated[AsyncSession, Depends(async_get_db)],
     current_user: Annotated[dict, Depends(get_current_user)],
     tenant_id: Annotated[str, Depends(get_tenant_context)],
+    _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
 ) -> TenantLimitsRead:
     """
     Get current tenant rate limits and quotas.

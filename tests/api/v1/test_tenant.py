@@ -191,6 +191,7 @@ class TestGetCurrentTenant:
             db=mock_db,
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
+            _rate_limit=Mock(),
         )
 
         assert result == sample_tenant_with_limits
@@ -213,6 +214,7 @@ class TestGetCurrentTenant:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -236,6 +238,7 @@ class TestGetCurrentTenant:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
 
@@ -271,6 +274,7 @@ class TestUpdateCurrentTenant:
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
             update_data=update_data,
+            _rate_limit=Mock(),
         )
 
         assert result.name == "Updated Company"
@@ -301,6 +305,7 @@ class TestUpdateCurrentTenant:
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
                 update_data=update_data,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -324,6 +329,7 @@ class TestUpdateCurrentTenant:
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
                 update_data=update_data,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -350,6 +356,7 @@ class TestUpdateCurrentTenant:
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
                 update_data=update_data,
+                _rate_limit=Mock(),
             )
 
         mock_db.rollback.assert_called_once()
@@ -379,6 +386,7 @@ class TestUpdateCurrentTenant:
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
                 update_data=update_data,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -405,6 +413,7 @@ class TestUpdateCurrentTenant:
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
                 update_data=update_data,
+                _rate_limit=Mock(),
             )
 
         mock_db.rollback.assert_called_once()
@@ -435,6 +444,7 @@ class TestGetTenantUsage:
             db=mock_db,
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
+            _rate_limit=Mock(),
         )
 
         assert result == sample_tenant_usage_stats
@@ -460,6 +470,7 @@ class TestGetTenantUsage:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -480,6 +491,7 @@ class TestGetTenantUsage:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -502,6 +514,7 @@ class TestGetTenantUsage:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -548,6 +561,7 @@ class TestGetTenantUsage:
             db=mock_db,
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
+            _rate_limit=Mock(),
         )
 
         assert result.monitors_remaining == 0
@@ -598,6 +612,7 @@ class TestGetTenantUsage:
             db=mock_db,
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
+            _rate_limit=Mock(),
         )
 
         assert result.monitors_count == 0
@@ -629,6 +644,7 @@ class TestGetTenantLimits:
             db=mock_db,
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
+            _rate_limit=Mock(),
         )
 
         assert result == sample_tenant_limits
@@ -653,6 +669,7 @@ class TestGetTenantLimits:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -673,6 +690,7 @@ class TestGetTenantLimits:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -695,6 +713,7 @@ class TestGetTenantLimits:
                 db=mock_db,
                 current_user=current_user_with_tenant,
                 tenant_id=tenant_id,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -732,6 +751,7 @@ class TestGetTenantLimits:
             db=mock_db,
             current_user=current_user_with_tenant,
             tenant_id=tenant_id,
+            _rate_limit=Mock(),
         )
 
         assert result.max_monitors == 1000

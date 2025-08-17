@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.logger import logging
 from ..core.redis_client import redis_client
 from ..crud.crud_tenant import CRUDTenant, crud_tenant
+from ..models.tenant import Tenant
 from ..schemas.tenant import (
     TenantActivateRequest,
     TenantAdminPagination,
@@ -29,11 +30,12 @@ from ..schemas.tenant import (
     TenantUpdate,
     TenantUsageStats,
 )
+from .base_service import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class TenantService:
+class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead]):
     """
     Service layer for Tenant operations.
     Handles tenant management with Redis caching for configuration access.
@@ -41,7 +43,38 @@ class TenantService:
 
     def __init__(self, crud_tenant: CRUDTenant):
         """Initialize tenant service with CRUD dependency."""
+        super().__init__(crud_tenant)
         self.crud_tenant = crud_tenant
+
+    def get_cache_key(self, entity_id: str, **kwargs) -> str:
+        """
+        Get Redis cache key for tenant.
+
+        Args:
+            entity_id: Tenant ID
+            **kwargs: Additional key parameters
+
+        Returns:
+            Redis key string
+        """
+        key_type = kwargs.get('key_type', 'config')
+        return f"tenant:{entity_id}:{key_type}"
+
+    def get_cache_ttl(self) -> int:
+        """
+        Get cache TTL in seconds.
+        Cache TTL is 1 hour. The Rust monitor refreshes every 30 seconds,
+        but the cache itself has a longer TTL for efficiency.
+
+        Returns:
+            TTL in seconds (3600)
+        """
+        return 3600
+
+    @property
+    def read_schema(self) -> type[TenantRead]:
+        """Get the read schema class for validation."""
+        return TenantRead
 
     async def create_tenant(
         self,
@@ -262,7 +295,8 @@ class TenantService:
             key = f"tenant:{tenant.id}:config"
             tenant_dict = TenantRead.model_validate(tenant).model_dump_json()
 
-            # Cache for 1 hour (tenant config changes infrequently)
+            # Cache for 1 hour (3600 seconds)
+            # oz-multi-tenant refreshes every 30 seconds but cache TTL is longer
             await redis_client.set(key, tenant_dict, expiration=3600)
         except Exception as e:
             logger.error(f"Failed to cache tenant {tenant.id}: {e}")
@@ -649,40 +683,72 @@ class TenantService:
             Paginated tenant list with admin details
         """
         from ..models.monitor import Monitor
+        from ..models.tenant import TenantLimits
         from ..models.trigger import Trigger
         from ..models.user import User
 
         # Get base pagination
         result = await self.list_tenants(db, page, size, filters, sort)
 
-        # Enhance with admin information for each tenant
+        if not result["items"]:
+            return TenantAdminPagination(
+                items=[],
+                total=result["total"],
+                page=result["page"],
+                size=result["size"],
+                pages=result["pages"],
+            )
+
+        # Collect all tenant IDs for batch queries
+        tenant_ids = [tenant.id for tenant in result["items"]]
+
+        # Batch query for user counts
+        user_counts_query = (
+            select(User.tenant_id, func.count(User.id).label("count"))
+            .where(User.tenant_id.in_(tenant_ids), ~User.is_deleted)
+            .group_by(User.tenant_id)
+        )
+        user_counts_result = await db.execute(user_counts_query)
+        user_counts = {row.tenant_id: int(row.count) for row in user_counts_result}  # type: ignore[call-overload]
+
+        # Batch query for monitor counts
+        monitor_counts_query = (
+            select(Monitor.tenant_id, func.count(Monitor.id).label("count"))
+            .where(Monitor.tenant_id.in_(tenant_ids), Monitor.active == True)  # noqa: E712
+            .group_by(Monitor.tenant_id)
+        )
+        monitor_counts_result = await db.execute(monitor_counts_query)
+        monitor_counts = {row.tenant_id: int(row.count) for row in monitor_counts_result}  # type: ignore[call-overload]
+
+        # Batch query for trigger counts
+        trigger_counts_query = (
+            select(Trigger.tenant_id, func.count(Trigger.id).label("count"))
+            .where(Trigger.tenant_id.in_(tenant_ids), Trigger.active == True)  # noqa: E712
+            .group_by(Trigger.tenant_id)
+        )
+        trigger_counts_result = await db.execute(trigger_counts_query)
+        trigger_counts = {row.tenant_id: int(row.count) for row in trigger_counts_result}  # type: ignore[call-overload]
+
+        # Batch query for tenant limits
+        limits_query = select(TenantLimits).where(TenantLimits.tenant_id.in_(tenant_ids))
+        limits_result = await db.execute(limits_query)
+        tenant_limits = {limit.tenant_id: limit for limit in limits_result.scalars()}
+
+        # Build enhanced items with batch-fetched data
         enhanced_items = []
         for tenant in result["items"]:
-            # Get additional counts
-            user_count_query = select(func.count(User.id)).where(
-                User.tenant_id == tenant.id,
-                ~User.is_deleted
-            )
-            monitor_count_query = select(func.count(Monitor.id)).where(
-                Monitor.tenant_id == tenant.id,
-                Monitor.active == True  # noqa: E712
-            )
-            trigger_count_query = select(func.count(Trigger.id)).where(
-                Trigger.tenant_id == tenant.id,
-                Trigger.active == True  # noqa: E712
-            )
+            # Get counts from batch results (default to 0 if not found)
+            user_count = user_counts.get(tenant.id, 0)
+            monitor_count = monitor_counts.get(tenant.id, 0)
+            trigger_count = trigger_counts.get(tenant.id, 0)
 
-            user_count_result = await db.execute(user_count_query)
-            user_count = user_count_result.scalar() or 0
-
-            monitor_count_result = await db.execute(monitor_count_query)
-            monitor_count = monitor_count_result.scalar() or 0
-
-            trigger_count_result = await db.execute(trigger_count_query)
-            trigger_count = trigger_count_result.scalar() or 0
-
-            # Get limits
-            limits = await self.get_tenant_limits(db, tenant.id)
+            # Get limits from batch results or create defaults
+            limits: Optional[TenantLimitsRead]
+            if tenant.id in tenant_limits:
+                limits = TenantLimitsRead.model_validate(tenant_limits[tenant.id])
+            else:
+                # Use the existing method for default limits (won't cause N+1 since it's just defaults)
+                limits = await self.get_tenant_limits(db, tenant.id)
 
             # Create admin read schema
             admin_tenant = TenantAdminRead(

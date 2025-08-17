@@ -204,6 +204,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             page=1,
             size=50,
             name=None,
@@ -236,6 +237,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             page=1,
             size=50,
             name="test",
@@ -280,6 +282,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             page=2,
             size=10,
             name=None,
@@ -313,6 +316,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             page=1,
             size=50,
             name="nonexistent",
@@ -349,6 +353,7 @@ class TestCreateTenant:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             tenant_in=sample_tenant_create,
         )
 
@@ -378,6 +383,7 @@ class TestCreateTenant:
                 _request=Mock(),
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
                 tenant_in=sample_tenant_create,
             )
 
@@ -411,6 +417,7 @@ class TestCreateTenant:
                 _request=Mock(),
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
                 tenant_in=tenant_create,
             )
 
@@ -434,6 +441,7 @@ class TestCreateTenant:
                 _request=Mock(),
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
                 tenant_in=sample_tenant_create,
             )
 
@@ -470,6 +478,7 @@ class TestGetTenant:
             tenant_id=str(sample_tenant_id),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
         )
 
         assert result.id == sample_tenant_id
@@ -491,6 +500,7 @@ class TestGetTenant:
                 tenant_id="invalid-uuid",
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -510,6 +520,7 @@ class TestGetTenant:
                 tenant_id=str(sample_tenant_id),
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
 
@@ -542,6 +553,7 @@ class TestUpdateTenant:
             tenant_update=tenant_update,
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
         )
 
         assert result.name == "Updated Company"
@@ -564,6 +576,7 @@ class TestUpdateTenant:
                 tenant_update=tenant_update,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -585,6 +598,7 @@ class TestUpdateTenant:
                 tenant_update=tenant_update,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -610,6 +624,7 @@ class TestUpdateTenant:
                 tenant_update=tenant_update,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
         mock_db.rollback.assert_called_once()
@@ -638,6 +653,7 @@ class TestDeleteTenant:
             tenant_id=str(target_tenant_id),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             is_hard_delete=False,
         )
 
@@ -665,6 +681,7 @@ class TestDeleteTenant:
             tenant_id=str(target_tenant_id),
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
             is_hard_delete=True,
         )
 
@@ -690,6 +707,7 @@ class TestDeleteTenant:
                 tenant_id=str(sample_tenant_id),  # Same as admin's tenant
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
                 is_hard_delete=False,
             )
 
@@ -710,6 +728,7 @@ class TestDeleteTenant:
                 tenant_id=str(uuid.uuid4()),
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
                 is_hard_delete=False,
             )
 
@@ -732,6 +751,7 @@ class TestDeleteTenant:
                 tenant_id=str(target_tenant_id),
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
                 is_hard_delete=False,
             )
 
@@ -766,6 +786,7 @@ class TestSuspendTenant:
             suspend_request=suspend_request,
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
         )
 
         assert result.status == "suspended"
@@ -794,6 +815,7 @@ class TestSuspendTenant:
                 suspend_request=suspend_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -816,6 +838,7 @@ class TestSuspendTenant:
                 suspend_request=suspend_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -836,6 +859,7 @@ class TestSuspendTenant:
                 suspend_request=suspend_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
 
@@ -871,6 +895,7 @@ class TestActivateTenant:
             activate_request=activate_request,
             db=mock_db,
             admin_user=sample_admin_user,
+            _rate_limit=Mock(),
         )
 
         assert result.status == "active"
@@ -896,6 +921,7 @@ class TestActivateTenant:
                 activate_request=activate_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -916,6 +942,7 @@ class TestActivateTenant:
                 activate_request=activate_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
 
     @pytest.mark.asyncio
@@ -941,4 +968,5 @@ class TestActivateTenant:
                 activate_request=activate_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
+                _rate_limit=Mock(),
             )
