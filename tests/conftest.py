@@ -45,7 +45,16 @@ def override_dependency(dependency: Callable[..., Any], mocked_response: Any) ->
 @pytest.fixture
 def mock_db():
     """Mock database session for unit tests."""
-    return Mock(spec=AsyncSession)
+    mock = Mock(spec=AsyncSession)
+    # Add async context manager support for transactions
+    mock.begin = Mock(
+        return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=None),
+            __aexit__=AsyncMock(return_value=None)
+        )
+    )
+    mock.flush = AsyncMock(return_value=None)
+    return mock
 
 
 @pytest.fixture

@@ -86,18 +86,13 @@ async def list_filter_scripts(
         sort=sort,
     )
 
-    # If include_content is requested, fetch content for each script
+    # If include_content is requested, fetch content for all scripts in batch
     if include_content:
-        items_with_content: list[FilterScriptWithContent] = []
-        for script in result.items:
-            script_with_content = await filter_script_service.get_filter_script(
-                db=db,
-                script_id=str(script.id),
-                include_content=True,
-            )
-            # Only append if it's actually a FilterScriptWithContent
-            if script_with_content and isinstance(script_with_content, FilterScriptWithContent):
-                items_with_content.append(script_with_content)
+        # Use batch method to avoid N+1 queries
+        items_with_content = await filter_script_service.get_filter_scripts_with_content(
+            db=db,
+            scripts=result.items,
+        )
 
         # Return admin pagination with content
         admin_result = FilterScriptAdminPagination(

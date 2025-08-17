@@ -178,6 +178,11 @@ class TestListFilterScripts:
             return_value=mock_result
         )
 
+        # Mock the batch content method when include_content=True
+        mock_filter_script_service.get_filter_scripts_with_content = AsyncMock(
+            return_value=[]
+        )
+
         result = await list_filter_scripts(
             _request=Mock(),
             db=mock_db,
@@ -330,9 +335,9 @@ class TestListFilterScripts:
             return_value=mock_result
         )
 
-        # Also mock get_filter_script for when include_content=True
-        mock_filter_script_service.get_filter_script = AsyncMock(
-            return_value=script_with_content
+        # Mock the batch content method when include_content=True
+        mock_filter_script_service.get_filter_scripts_with_content = AsyncMock(
+            return_value=[script_with_content]
         )
 
         result = await list_filter_scripts(

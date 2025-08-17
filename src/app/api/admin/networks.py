@@ -128,39 +128,42 @@ async def create_network(
     logger.info(f"Admin {admin_user['id']} creating network {network_in.slug}")
 
     try:
-        # For admin networks, use a special platform tenant
-        # Use a different UUID for testing to avoid conflicts with existing tenant limits
-        platform_tenant_id = uuid_pkg.UUID("11111111-1111-1111-1111-111111111111")
+        # Use transaction for atomic operations
+        async with db.begin():
+            # For admin networks, use a special platform tenant
+            # Use a different UUID for testing to avoid conflicts with existing tenant limits
+            platform_tenant_id = uuid_pkg.UUID("11111111-1111-1111-1111-111111111111")
 
-        # Ensure platform tenant exists (simple approach)
-        from ...crud.crud_tenant import crud_tenant
-        platform_tenant = await crud_tenant.get(db=db, id=platform_tenant_id)
-        if not platform_tenant:
-            # Create minimal platform tenant
-            from ...schemas.tenant import TenantCreateInternal
-            tenant_data = TenantCreateInternal(
-                id=platform_tenant_id,
-                name="Platform Admin",
-                slug="platform-admin",
-                plan="enterprise",
-                status="active",
-                settings={}
+            # Ensure platform tenant exists (simple approach)
+            from ...crud.crud_tenant import crud_tenant
+            platform_tenant = await crud_tenant.get(db=db, id=platform_tenant_id)
+            if not platform_tenant:
+                # Create minimal platform tenant
+                from ...schemas.tenant import TenantCreateInternal
+                tenant_data = TenantCreateInternal(
+                    id=platform_tenant_id,
+                    name="Platform Admin",
+                    slug="platform-admin",
+                    plan="enterprise",
+                    status="active",
+                    settings={}
+                )
+                await crud_tenant.create(db=db, object=tenant_data)
+                await db.flush()  # Ensure tenant exists before network creation
+                logger.info(f"Created platform tenant {platform_tenant_id}")
+
+            network_in_with_tenant = NetworkCreate(
+                tenant_id=platform_tenant_id,
+                **network_in.model_dump()
             )
-            await crud_tenant.create(db=db, object=tenant_data)
-            logger.info(f"Created platform tenant {platform_tenant_id}")
 
-        network_in_with_tenant = NetworkCreate(
-            tenant_id=platform_tenant_id,
-            **network_in.model_dump()
-        )
+            network = await network_service.create_network(
+                db=db,
+                network_in=network_in_with_tenant,
+            )
 
-        network = await network_service.create_network(
-            db=db,
-            network_in=network_in_with_tenant,
-        )
-
-        logger.info(f"Created network {network.id} ({network.slug})")
-        return network
+            logger.info(f"Created network {network.id} ({network.slug})")
+            return network
 
     except DuplicateValueException:
         # Re-raise DuplicateValueException as is

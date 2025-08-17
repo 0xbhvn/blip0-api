@@ -168,6 +168,51 @@ class FilterScriptService(BaseService):
 
         return FilterScriptRead.model_validate(db_script)
 
+    async def get_filter_scripts_with_content(
+        self,
+        db: AsyncSession,
+        scripts: list[FilterScriptRead],
+    ) -> list[FilterScriptWithContent]:
+        """
+        Batch fetch filter scripts with content to avoid N+1 queries.
+
+        Args:
+            db: Database session
+            scripts: List of filter script objects
+
+        Returns:
+            List of filter scripts with content
+        """
+        import asyncio
+
+        if not scripts:
+            return []
+
+        # Prepare tasks for parallel file reading
+        tasks = []
+        for script in scripts:
+            if hasattr(script, 'script_path') and script.script_path:
+                tasks.append(self._read_script_file(script.script_path))
+            else:
+                # Create a coroutine that returns None for scripts without paths
+                async def return_none():
+                    return None
+                tasks.append(return_none())
+
+        # Execute all file reads in parallel
+        contents = await asyncio.gather(*tasks)
+
+        # Combine scripts with their content
+        result = []
+        for script, content in zip(scripts, contents):
+            if hasattr(script, 'model_dump'):
+                script_data = script.model_dump()
+            else:
+                script_data = FilterScriptRead.model_validate(script).model_dump()
+            result.append(FilterScriptWithContent(**script_data, script_content=content))
+
+        return result
+
     async def update_filter_script(
         self,
         db: AsyncSession,
@@ -385,16 +430,25 @@ class FilterScriptService(BaseService):
         # Validate based on language
         language = existing.language if hasattr(existing, 'language') else 'bash'
         if language == "bash":
-            # Check bash syntax
-            result = subprocess.run(
-                ["bash", "-n", "-"],
-                input=content,
-                capture_output=True,
-                text=True,
-                timeout=5
+            # Check bash syntax using async subprocess
+            import asyncio
+            proc = await asyncio.create_subprocess_exec(
+                "bash", "-n", "-",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            if result.returncode != 0:
-                errors.append(f"Bash syntax error: {result.stderr}")
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(content.encode()),
+                    timeout=5
+                )
+                if proc.returncode != 0:
+                    errors.append(f"Bash syntax error: {stderr.decode()}")
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                errors.append("Bash syntax check timed out")
 
         elif language == "python":
             # Check Python syntax
@@ -435,17 +489,28 @@ class FilterScriptService(BaseService):
 
                 if cmd:
                     timeout_ms = existing.timeout_ms if hasattr(existing, 'timeout_ms') else 1000
-                    result = subprocess.run(
-                        cmd,
-                        input=content,
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout_ms / 1000,
-                        env={**os.environ, "FILTER_INPUT": test_input_json}
+                    import asyncio
+                    import os
+                    env = {**os.environ, "FILTER_INPUT": test_input_json}
+                    proc = await asyncio.create_subprocess_shell(
+                        " ".join(cmd),
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        env=env
                     )
-                    test_output = result.stdout
-                    if result.returncode != 0:
-                        warnings.append(f"Test execution failed: {result.stderr}")
+                    try:
+                        stdout, stderr = await asyncio.wait_for(
+                            proc.communicate(content.encode()),
+                            timeout=timeout_ms / 1000
+                        )
+                        test_output = stdout.decode()
+                        if proc.returncode != 0:
+                            warnings.append(f"Test execution failed: {stderr.decode()}")
+                    except TimeoutError:
+                        proc.kill()
+                        await proc.wait()
+                        warnings.append("Test execution timed out")
 
                     execution_time_ms = int((time.time() - start_time) * 1000)
 
@@ -540,14 +605,26 @@ class FilterScriptService(BaseService):
         return extensions.get(language.lower(), "txt")
 
     async def _read_script_file(self, script_path: str) -> Optional[str]:
-        """Read script content from filesystem."""
+        """Read script content from filesystem with secure path validation."""
         try:
-            # Handle relative path
-            full_path = Path(script_path.replace("./", ""))
-            if not full_path.exists():
-                full_path = self.scripts_base_dir / Path(script_path).name
+            # Extract only the filename to prevent path traversal
+            script_name = Path(script_path).name
+            if not script_name:
+                logger.error(f"Invalid script path: {script_path}")
+                return None
 
-            if full_path.exists():
+            # Construct the full path within scripts_base_dir
+            full_path = (self.scripts_base_dir / script_name).resolve()
+
+            # Security check: ensure resolved path is within scripts_base_dir
+            try:
+                full_path.relative_to(self.scripts_base_dir.resolve())
+            except ValueError:
+                # Path is outside scripts_base_dir - potential path traversal attempt
+                logger.error(f"Path traversal attempt detected: {script_path}")
+                return None
+
+            if full_path.exists() and full_path.is_file():
                 return full_path.read_text()
             else:
                 logger.warning(f"Script file not found: {full_path}")
@@ -557,66 +634,38 @@ class FilterScriptService(BaseService):
             return None
 
     async def _cache_filter_script(self, script: Any) -> None:
-        """Cache filter script metadata in Redis."""
-        if not hasattr(redis_client, '_redis') or not redis_client._redis:
-            return
+        """Cache filter script metadata in Redis using BaseService pattern."""
+        # Use BaseService's cache_entity method
+        await self.cache_entity(script)
 
+        # Also cache by slug for quick lookup
         try:
-            # Prepare cache data
-            if hasattr(script, 'model_dump'):
-                cache_data = script.model_dump(mode='json')
-            elif hasattr(script, '__dict__'):
-                cache_data = FilterScriptRead.model_validate(script).model_dump(mode='json')
-            else:
-                cache_data = dict(script)
-
-            # Cache with 1 hour TTL
-            cache_key = f"platform:filter_scripts:{script.id}"
-            await redis_client.set(
-                cache_key,
-                json.dumps(cache_data, default=str),
-                expiration=3600
-            )
-
-            # Also cache by slug for quick lookup
             slug_key = f"platform:filter_scripts:slug:{script.slug}"
-            await redis_client.set(slug_key, str(script.id), expiration=3600)
-
+            await redis_client.set(slug_key, str(script.id), expiration=self.get_cache_ttl())
             logger.debug(f"Cached filter script {script.id}")
         except Exception as e:
-            logger.error(f"Failed to cache filter script: {e}")
+            logger.error(f"Failed to cache filter script slug: {e}")
 
-    async def _get_cached_filter_script(self, script_id: str) -> Optional[dict]:
-        """Get cached filter script from Redis."""
-        if not hasattr(redis_client, '_redis') or not redis_client._redis:
-            return None
-
-        try:
-            cache_key = f"platform:filter_scripts:{script_id}"
-            cached = await redis_client.get(cache_key)
-            if cached:
-                if isinstance(cached, str):
-                    data = json.loads(cached)
-                    return dict(data) if data else None
-                elif isinstance(cached, dict):
-                    return dict(cached)
-        except Exception as e:
-            logger.error(f"Failed to get cached filter script: {e}")
-
+    async def _get_cached_filter_script(self, script_id: str) -> Optional[dict[str, Any]]:
+        """Get cached filter script from Redis using BaseService pattern."""
+        # Use BaseService's get_cached_entity method
+        cached = await self.get_cached_entity(script_id)
+        if cached:
+            if hasattr(cached, 'model_dump'):
+                result: dict[str, Any] = cached.model_dump()
+                return result
+            elif isinstance(cached, dict):
+                return dict(cached)  # Explicit cast to satisfy mypy
         return None
 
     async def _invalidate_cache(self, script_id: str) -> None:
-        """Invalidate filter script cache."""
-        if not hasattr(redis_client, '_redis') or not redis_client._redis:
-            return
-
+        """Invalidate filter script cache using BaseService pattern."""
         try:
-            # Get script to find slug
+            # Get script to find slug before invalidating
             cached = await self._get_cached_filter_script(script_id)
 
-            # Delete main cache entry
-            cache_key = f"platform:filter_scripts:{script_id}"
-            await redis_client.delete(cache_key)
+            # Use BaseService's invalidate_cache method
+            await self.invalidate_cache(script_id)
 
             # Delete slug cache if we have it
             if cached and cached.get("slug"):
@@ -625,7 +674,7 @@ class FilterScriptService(BaseService):
 
             logger.debug(f"Invalidated cache for filter script {script_id}")
         except Exception as e:
-            logger.error(f"Failed to invalidate filter script cache: {e}")
+            logger.error(f"Failed to invalidate cache: {e}")
 
 
 # Create instance
