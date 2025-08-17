@@ -51,7 +51,7 @@ async def list_monitors(
     has_triggers: Optional[bool] = Query(None, description="Filter monitors with/without triggers"),
     # Sort parameters
     sort_field: str = Query("created_at", description="Field to sort by"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$", description="Sort order"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order"),
 ) -> dict[str, Any]:
     """
     List monitors for the current tenant with pagination, filtering, and sorting.
