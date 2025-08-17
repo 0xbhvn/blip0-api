@@ -209,3 +209,89 @@ class TenantBulkDelete(BaseModel):
     """Schema for bulk deleting tenants."""
     ids: list[uuid_pkg.UUID]
     is_hard_delete: bool = Field(default=False)
+
+
+# Usage and statistics schemas
+class TenantUsageStats(BaseModel):
+    """Schema for tenant usage statistics."""
+    tenant_id: uuid_pkg.UUID
+    # Current usage
+    monitors_count: int = Field(ge=0, description="Current number of monitors")
+    networks_count: int = Field(ge=0, description="Current number of networks")
+    triggers_count: int = Field(ge=0, description="Current number of triggers")
+    storage_gb_used: float = Field(ge=0.0, description="Current storage used in GB")
+    api_calls_last_hour: int = Field(ge=0, description="API calls in the last hour")
+
+    # Limits
+    monitors_limit: int = Field(ge=0, description="Maximum monitors allowed")
+    networks_limit: int = Field(ge=0, description="Maximum networks allowed")
+    triggers_limit: int = Field(ge=0, description="Maximum triggers allowed")
+    storage_gb_limit: float = Field(ge=0.0, description="Maximum storage allowed in GB")
+    api_calls_per_hour_limit: int = Field(ge=0, description="Maximum API calls per hour")
+
+    # Remaining quotas
+    monitors_remaining: int = Field(ge=0, description="Remaining monitor quota")
+    networks_remaining: int = Field(ge=0, description="Remaining network quota")
+    triggers_remaining: int = Field(ge=0, description="Remaining trigger quota")
+    storage_gb_remaining: float = Field(ge=0.0, description="Remaining storage quota in GB")
+    api_calls_remaining: int = Field(ge=0, description="Remaining API calls this hour")
+
+    # Usage percentages
+    monitors_usage_percent: float = Field(ge=0.0, le=100.0, description="Monitor usage percentage")
+    networks_usage_percent: float = Field(ge=0.0, le=100.0, description="Network usage percentage")
+    triggers_usage_percent: float = Field(ge=0.0, le=100.0, description="Trigger usage percentage")
+    storage_usage_percent: float = Field(ge=0.0, le=100.0, description="Storage usage percentage")
+    api_calls_usage_percent: float = Field(ge=0.0, le=100.0, description="API calls usage percentage")
+
+    calculated_at: datetime = Field(description="When the stats were calculated")
+
+
+# Admin operation schemas
+class TenantSuspendRequest(BaseModel):
+    """Schema for suspending a tenant."""
+    reason: Optional[str] = Field(None, max_length=500, description="Reason for suspension")
+    notify_users: bool = Field(default=True, description="Whether to notify tenant users")
+
+
+class TenantActivateRequest(BaseModel):
+    """Schema for activating a suspended tenant."""
+    reason: Optional[str] = Field(None, max_length=500, description="Reason for activation")
+    notify_users: bool = Field(default=True, description="Whether to notify tenant users")
+
+
+# Admin-specific read schema
+class TenantAdminRead(TenantRead):
+    """Schema for admin reading tenant data with additional fields."""
+    limits: Optional[TenantLimitsRead] = None
+    user_count: int = Field(default=0, description="Number of users in tenant")
+    monitor_count: int = Field(default=0, description="Number of monitors")
+    trigger_count: int = Field(default=0, description="Number of triggers")
+    last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
+    suspended_at: Optional[datetime] = Field(None, description="When tenant was suspended")
+    suspension_reason: Optional[str] = Field(None, description="Reason for suspension")
+
+
+class TenantAdminPagination(BaseModel):
+    """Schema for paginated tenant response with admin details."""
+    items: list[TenantAdminRead]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+
+# Self-service update schema
+class TenantSelfServiceUpdate(BaseModel):
+    """Schema for tenant self-service updates (limited fields)."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    settings: Optional[dict[str, Any]] = Field(None, description="Tenant-specific settings")
+
+    @field_validator("settings")
+    @classmethod
+    def validate_settings(cls, v: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        """Validate that settings don't contain restricted keys."""
+        if v is not None:
+            restricted_keys = {"plan", "status", "limits", "max_monitors", "max_networks"}
+            if any(key in v for key in restricted_keys):
+                raise ValueError(f"Settings cannot contain restricted keys: {restricted_keys}")
+        return v

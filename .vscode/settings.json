@@ -1,0 +1,71 @@
+{
+	"editor.formatOnPaste": true,
+	"editor.formatOnSave": true,
+	"editor.defaultFormatter": "charliermarsh.ruff",
+	"[python]": {
+		"editor.defaultFormatter": "charliermarsh.ruff",
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.organizeImports": "explicit",
+			"source.fixAll.ruff": "explicit"
+		}
+	},
+	"python.testing.pytestEnabled": true,
+	"python.testing.pytestArgs": ["tests"],
+	"python.testing.unittestEnabled": false,
+	"python.testing.autoTestDiscoverOnSaveEnabled": true,
+	"python.analysis.typeCheckingMode": "basic",
+	"python.analysis.autoImportCompletions": true,
+	"python.analysis.inlayHints.functionReturnTypes": true,
+	"python.analysis.inlayHints.variableTypes": true,
+	"python.analysis.autoFormatStrings": true,
+	"python.analysis.diagnosticMode": "workspace",
+	"files.exclude": {
+		"**/__pycache__": true,
+		"**/*.pyc": true,
+		"**/.pytest_cache": true,
+		"**/.coverage": true,
+		"**/htmlcov": true,
+		"**/.mypy_cache": true,
+		"**/.ruff_cache": true
+	},
+	"search.exclude": {
+		"**/__pycache__": true,
+		"**/*.pyc": true,
+		"**/.pytest_cache": true,
+		"**/htmlcov": true,
+		"**/.venv": true,
+		"**/.mypy_cache": true,
+		"**/.ruff_cache": true
+	},
+	"files.watcherExclude": {
+		"**/.venv/**": true,
+		"**/__pycache__/**": true,
+		"**/.pytest_cache/**": true
+	},
+	"terminal.integrated.env.osx": {
+		"PYTHONPATH": "${workspaceFolder}/src"
+	},
+	"terminal.integrated.env.linux": {
+		"PYTHONPATH": "${workspaceFolder}/src"
+	},
+	"terminal.integrated.env.windows": {
+		"PYTHONPATH": "${workspaceFolder}\\src"
+	},
+	"python.envFile": "${workspaceFolder}/src/.env",
+	"python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+	"ruff.enable": true,
+	"ruff.organizeImports": true,
+	"ruff.fixAll": true,
+	"ruff.importStrategy": "fromEnvironment",
+	"ruff.interpreter": ["${workspaceFolder}/.venv/bin/python"],
+	"ruff.configurationPreference": "filesystemFirst",
+	"ruff.lineLength": 100,
+	"ruff.lint.preview": false,
+	"ruff.format.preview": false,
+	"mypy-type-checker.args": [
+		"--config-file=${workspaceFolder}/pyproject.toml"
+	],
+	"mypy-type-checker.importStrategy": "fromEnvironment",
+	"mypy-type-checker.reportingScope": "workspace"
+}

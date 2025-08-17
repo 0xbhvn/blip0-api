@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from ..core.plan_limits import get_plan_limits_for_db
 from ..models.tenant import Tenant, TenantLimits
 from ..schemas.tenant import (
     TenantCreate,
@@ -36,7 +37,7 @@ class CRUDTenant(
         TenantDelete,
         TenantRead,
         TenantFilter,
-        TenantSort
+        TenantSort,
     ]
 ):
     """
@@ -45,10 +46,7 @@ class CRUDTenant(
     """
 
     async def create_with_limits(
-        self,
-        db: AsyncSession,
-        obj_in: TenantCreate,
-        plan_limits: Optional[dict[str, Any]] = None
+        self, db: AsyncSession, obj_in: TenantCreate, plan_limits: Optional[dict[str, Any]] = None
     ) -> TenantWithLimits:
         """
         Create a new tenant with default limits based on plan.
@@ -72,10 +70,7 @@ class CRUDTenant(
             plan_limits = self._get_default_limits_for_plan(obj_in.plan)
 
         # Create limits
-        limits_data = TenantLimitsCreate(
-            tenant_id=tenant.id,
-            **plan_limits
-        )
+        limits_data = TenantLimitsCreate(tenant_id=tenant.id, **plan_limits)
         limits = TenantLimits(**limits_data.model_dump())
         db.add(limits)
         await db.flush()
@@ -85,11 +80,7 @@ class CRUDTenant(
 
         return TenantWithLimits.model_validate(tenant)
 
-    async def get_with_limits(
-        self,
-        db: AsyncSession,
-        tenant_id: Any
-    ) -> Optional[TenantWithLimits]:
+    async def get_with_limits(self, db: AsyncSession, tenant_id: Any) -> Optional[TenantWithLimits]:
         """
         Get tenant with limits included.
 
@@ -100,9 +91,7 @@ class CRUDTenant(
         Returns:
             Tenant with limits or None
         """
-        query = select(self.model).where(
-            self.model.id == tenant_id
-        ).options(selectinload(self.model.limits))
+        query = select(self.model).where(self.model.id == tenant_id).options(selectinload(self.model.limits))
 
         result = await db.execute(query)
         tenant = result.scalar_one_or_none()
@@ -112,10 +101,7 @@ class CRUDTenant(
         return None
 
     async def update_limits(
-        self,
-        db: AsyncSession,
-        tenant_id: Any,
-        limits_update: TenantLimitsUpdate
+        self, db: AsyncSession, tenant_id: Any, limits_update: TenantLimitsUpdate
     ) -> Optional[TenantLimitsRead]:
         """
         Update tenant limits.
@@ -128,9 +114,7 @@ class CRUDTenant(
         Returns:
             Updated limits or None
         """
-        query = select(TenantLimits).where(
-            TenantLimits.tenant_id == tenant_id
-        )
+        query = select(TenantLimits).where(TenantLimits.tenant_id == tenant_id)
         result = await db.execute(query)
         limits = result.scalar_one_or_none()
 
@@ -146,12 +130,7 @@ class CRUDTenant(
 
         return TenantLimitsRead.model_validate(limits)
 
-    async def check_resource_limit(
-        self,
-        db: AsyncSession,
-        tenant_id: Any,
-        resource_type: str
-    ) -> tuple[bool, int, int]:
+    async def check_resource_limit(self, db: AsyncSession, tenant_id: Any, resource_type: str) -> tuple[bool, int, int]:
         """
         Check if tenant has capacity for a new resource.
 
@@ -163,9 +142,7 @@ class CRUDTenant(
         Returns:
             Tuple of (can_create, current_usage, max_limit)
         """
-        query = select(TenantLimits).where(
-            TenantLimits.tenant_id == tenant_id
-        )
+        query = select(TenantLimits).where(TenantLimits.tenant_id == tenant_id)
         result = await db.execute(query)
         limits = result.scalar_one_or_none()
 
@@ -181,13 +158,7 @@ class CRUDTenant(
         can_create = current_value < max_value
         return can_create, current_value, max_value
 
-    async def increment_usage(
-        self,
-        db: AsyncSession,
-        tenant_id: Any,
-        resource_type: str,
-        amount: int = 1
-    ) -> bool:
+    async def increment_usage(self, db: AsyncSession, tenant_id: Any, resource_type: str, amount: int = 1) -> bool:
         """
         Increment resource usage for a tenant.
 
@@ -200,16 +171,12 @@ class CRUDTenant(
         Returns:
             True if successful, False if limit exceeded
         """
-        can_create, current, max_limit = await self.check_resource_limit(
-            db, tenant_id, resource_type
-        )
+        can_create, current, max_limit = await self.check_resource_limit(db, tenant_id, resource_type)
 
         if not can_create and amount > 0:
             return False
 
-        query = select(TenantLimits).where(
-            TenantLimits.tenant_id == tenant_id
-        )
+        query = select(TenantLimits).where(TenantLimits.tenant_id == tenant_id)
         result = await db.execute(query)
         limits = result.scalar_one_or_none()
 
@@ -221,13 +188,7 @@ class CRUDTenant(
 
         return True
 
-    async def decrement_usage(
-        self,
-        db: AsyncSession,
-        tenant_id: Any,
-        resource_type: str,
-        amount: int = 1
-    ) -> bool:
+    async def decrement_usage(self, db: AsyncSession, tenant_id: Any, resource_type: str, amount: int = 1) -> bool:
         """
         Decrement resource usage for a tenant.
 
@@ -242,12 +203,7 @@ class CRUDTenant(
         """
         return await self.increment_usage(db, tenant_id, resource_type, -amount)
 
-    async def upgrade_plan(
-        self,
-        db: AsyncSession,
-        tenant_id: Any,
-        new_plan: str
-    ) -> Optional[TenantWithLimits]:
+    async def upgrade_plan(self, db: AsyncSession, tenant_id: Any, new_plan: str) -> Optional[TenantWithLimits]:
         """
         Upgrade tenant to a new plan with updated limits.
 
@@ -273,23 +229,14 @@ class CRUDTenant(
 
             # Update limits for new plan
             new_limits = self._get_default_limits_for_plan(new_plan)
-            await self.update_limits(
-                db,
-                tenant_id,
-                TenantLimitsUpdate(**new_limits)
-            )
+            await self.update_limits(db, tenant_id, TenantLimitsUpdate(**new_limits))
 
             await db.flush()
             return await self.get_with_limits(db, tenant_id)
 
         return None
 
-    async def get_active_tenants(
-        self,
-        db: AsyncSession,
-        page: int = 1,
-        size: int = 50
-    ) -> dict[str, Any]:
+    async def get_active_tenants(self, db: AsyncSession, page: int = 1, size: int = 50) -> dict[str, Any]:
         """
         Get all active tenants with pagination.
 
@@ -302,26 +249,14 @@ class CRUDTenant(
             Paginated active tenants
         """
         filters = TenantFilter(
-            name=None,
-            slug=None,
-            plan=None,
-            status="active",
-            created_after=None,
-            created_before=None
+            name=None, slug=None, plan=None, status="active", created_after=None, created_before=None
         )
         return await self.get_paginated(
-            db,
-            page=page,
-            size=size,
-            filters=filters,
-            sort=TenantSort(field="created_at", order="desc")
+            db, page=page, size=size, filters=filters, sort=TenantSort(field="created_at", order="desc")
         )
 
     async def suspend_tenant(
-        self,
-        db: AsyncSession,
-        tenant_id: Any,
-        reason: Optional[str] = None
+        self, db: AsyncSession, tenant_id: Any, reason: Optional[str] = None
     ) -> Optional[TenantRead]:
         """
         Suspend a tenant account.
@@ -350,11 +285,7 @@ class CRUDTenant(
 
         return None
 
-    async def reactivate_tenant(
-        self,
-        db: AsyncSession,
-        tenant_id: Any
-    ) -> Optional[TenantRead]:
+    async def reactivate_tenant(self, db: AsyncSession, tenant_id: Any) -> Optional[TenantRead]:
         """
         Reactivate a suspended tenant.
 
@@ -381,12 +312,7 @@ class CRUDTenant(
 
         return None
 
-    async def get_by_slug(
-        self,
-        db: AsyncSession,
-        slug: str,
-        tenant_id: Optional[Any] = None
-    ) -> Optional[Tenant]:
+    async def get_by_slug(self, db: AsyncSession, slug: str, tenant_id: Optional[Any] = None) -> Optional[Tenant]:
         """
         Get tenant by slug.
 
@@ -406,48 +332,15 @@ class CRUDTenant(
     def _get_default_limits_for_plan(self, plan: str) -> dict[str, Any]:
         """
         Get default resource limits for a plan.
+        Uses centralized plan limits configuration.
 
         Args:
             plan: Plan name
 
         Returns:
-            Dictionary of default limits
+            Dictionary of default limits with max_ prefix for database fields
         """
-        plan_limits = {
-            "free": {
-                "max_monitors": 10,
-                "max_networks": 3,
-                "max_triggers": 20,
-                "max_api_calls_per_hour": 1000,
-                "max_storage_gb": 1.0,
-                "max_concurrent_operations": 10
-            },
-            "starter": {
-                "max_monitors": 50,
-                "max_networks": 10,
-                "max_triggers": 100,
-                "max_api_calls_per_hour": 5000,
-                "max_storage_gb": 10.0,
-                "max_concurrent_operations": 25
-            },
-            "pro": {
-                "max_monitors": 200,
-                "max_networks": 50,
-                "max_triggers": 500,
-                "max_api_calls_per_hour": 20000,
-                "max_storage_gb": 100.0,
-                "max_concurrent_operations": 100
-            },
-            "enterprise": {
-                "max_monitors": 1000,
-                "max_networks": 200,
-                "max_triggers": 2000,
-                "max_api_calls_per_hour": 100000,
-                "max_storage_gb": 1000.0,
-                "max_concurrent_operations": 500
-            }
-        }
-        return plan_limits.get(plan, plan_limits["free"])
+        return get_plan_limits_for_db(plan)
 
 
 # Export crud instance

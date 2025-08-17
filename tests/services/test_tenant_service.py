@@ -632,7 +632,7 @@ class TestTenantServiceCachingMethods:
             expected_key = f"tenant:{sample_tenant.id}:config"
             assert call_args[0][0] == expected_key
 
-            # Check expiration
+            # Check expiration (1 hour cache TTL)
             assert call_args[1]["expiration"] == 3600
 
     @pytest.mark.asyncio
