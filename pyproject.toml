@@ -38,6 +38,8 @@ dependencies = [
 dev = [
     "pytest>=7.4.2",
     "pytest-mock>=3.14.0",
+    "pytest-cov>=4.1.0",
+    "coverage[toml]>=7.3.2",
     "faker>=26.0.0",
     "mypy>=1.8.0",
     "types-redis>=4.6.0",
@@ -101,6 +103,13 @@ convention = "numpy"
 filterwarnings = [
     "ignore::PendingDeprecationWarning:starlette.formparsers",
 ]
+addopts = [
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-branch",
+]
 
 [dependency-groups]
 dev = [
@@ -119,3 +128,39 @@ explicit_package_bases = true
 [[tool.mypy.overrides]]
 module = "src.app.*"
 disallow_untyped_defs = true
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/alembic/*",
+    "*/scripts/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+precision = 2
+show_missing = true
+skip_covered = false
+skip_empty = true
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"

@@ -3,7 +3,7 @@ Service layer for Trigger operations with Redis write-through caching.
 """
 
 import uuid as uuid_pkg
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -412,6 +412,45 @@ class TriggerService(BaseService[Trigger, TriggerCreate, TriggerUpdate, TriggerR
             tenant_id=tenant_id
         )
         return [TriggerRead.model_validate(r) if not isinstance(r, TriggerRead) else r for r in results]
+
+    async def get_multi(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        size: int = 50,
+        filters: Optional[Any] = None,
+        sort: Optional[Any] = None,
+        tenant_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Get paginated list of triggers.
+
+        Args:
+            db: Database session
+            page: Page number
+            size: Page size
+            filters: Filter criteria
+            sort: Sort criteria
+            tenant_id: Tenant ID
+
+        Returns:
+            Paginated response with triggers
+        """
+        result = await self.crud_trigger.get_paginated(
+            db=db,
+            page=page,
+            size=size,
+            filters=filters,
+            sort=sort,
+            tenant_id=tenant_id,
+        )
+
+        # Convert models to schemas
+        result["items"] = [
+            TriggerRead.model_validate(item) if not isinstance(item, TriggerRead) else item
+            for item in result["items"]
+        ]
+
+        return result
 
     async def _cache_trigger(
         self,
