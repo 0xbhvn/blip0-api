@@ -20,6 +20,7 @@ from ...core.exceptions.http_exceptions import (
 from ...core.logger import logging
 from ...schemas.network import (
     NetworkCreate,
+    NetworkCreateAdmin,
     NetworkFilter,
     NetworkPagination,
     NetworkRead,
@@ -108,7 +109,7 @@ async def create_network(
     db: Annotated[AsyncSession, Depends(async_get_db)],
     admin_user: Annotated[dict, Depends(get_current_admin)],
     _rate_limit: Annotated[None, Depends(rate_limiter_dependency)],
-    network_in: NetworkCreate,
+    network_in: NetworkCreateAdmin,
 ) -> NetworkRead:
     """
     Create a new network configuration.
@@ -127,12 +128,30 @@ async def create_network(
     logger.info(f"Admin {admin_user['id']} creating network {network_in.slug}")
 
     try:
-        # Set a default tenant_id for platform networks (could be admin's tenant or a system tenant)
-        # For now, using a fixed UUID for platform resources
-        platform_tenant_id = uuid_pkg.UUID("00000000-0000-0000-0000-000000000000")
+        # For admin networks, use a special platform tenant
+        # Use a different UUID for testing to avoid conflicts with existing tenant limits
+        platform_tenant_id = uuid_pkg.UUID("11111111-1111-1111-1111-111111111111")
+
+        # Ensure platform tenant exists (simple approach)
+        from ...crud.crud_tenant import crud_tenant
+        platform_tenant = await crud_tenant.get(db=db, id=platform_tenant_id)
+        if not platform_tenant:
+            # Create minimal platform tenant
+            from ...schemas.tenant import TenantCreateInternal
+            tenant_data = TenantCreateInternal(
+                id=platform_tenant_id,
+                name="Platform Admin",
+                slug="platform-admin",
+                plan="enterprise",
+                status="active",
+                settings={}
+            )
+            await crud_tenant.create(db=db, object=tenant_data)
+            logger.info(f"Created platform tenant {platform_tenant_id}")
+
         network_in_with_tenant = NetworkCreate(
-            **network_in.model_dump(),
-            tenant_id=platform_tenant_id
+            tenant_id=platform_tenant_id,
+            **network_in.model_dump()
         )
 
         network = await network_service.create_network(
@@ -143,8 +162,12 @@ async def create_network(
         logger.info(f"Created network {network.id} ({network.slug})")
         return network
 
+    except DuplicateValueException:
+        # Re-raise DuplicateValueException as is
+        raise
     except IntegrityError as e:
-        if "unique_active_network" in str(e):
+        error_str = str(e).lower()
+        if "unique_active_network" in error_str or "duplicate key" in error_str:
             raise DuplicateValueException(f"Network with slug '{network_in.slug}' already exists")
         raise BadRequestException(str(e))
     except Exception as e:
@@ -226,7 +249,8 @@ async def update_network(
         return network
 
     except IntegrityError as e:
-        if "unique_active_network" in str(e):
+        error_str = str(e).lower()
+        if "unique_active_network" in error_str or "duplicate key" in error_str:
             raise DuplicateValueException(f"Network with slug '{network_update.slug}' already exists")
         raise BadRequestException(str(e))
     except Exception as e:

@@ -155,8 +155,12 @@ async def create_filter_script(
         logger.info(f"Created filter script {script.id} ({script.slug})")
         return script
 
+    except DuplicateValueException:
+        # Re-raise DuplicateValueException as is
+        raise
     except IntegrityError as e:
-        if "unique_filter_script_slug" in str(e):
+        error_str = str(e).lower()
+        if "unique_filter_script_slug" in error_str or "duplicate key" in error_str:
             raise DuplicateValueException(f"Filter script with slug '{script_in.slug}' already exists")
         raise BadRequestException(str(e))
     except ValueError as e:
@@ -259,7 +263,8 @@ async def update_filter_script(
         return script
 
     except IntegrityError as e:
-        if "unique_filter_script_slug" in str(e):
+        error_str = str(e).lower()
+        if "unique_filter_script_slug" in error_str or "duplicate key" in error_str:
             raise DuplicateValueException(f"Filter script with slug '{script_update.slug}' already exists")
         raise BadRequestException(str(e))
     except ValueError as e:
