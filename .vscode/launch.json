@@ -1,0 +1,111 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Python: FastAPI",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "uvicorn",
+			"args": ["src.app.main:app", "--reload", "--port", "8000"],
+			"jinja": true,
+			"justMyCode": true,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: Current File",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${file}",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: Pytest",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "pytest",
+			"args": ["-v", "${file}"],
+			"console": "integratedTerminal",
+			"justMyCode": false,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: Pytest All Tests",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "pytest",
+			"args": ["-v", "tests/"],
+			"console": "integratedTerminal",
+			"justMyCode": false,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: Pytest Tenant Tests",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "pytest",
+			"args": [
+				"-v",
+				"tests/api/admin/test_admin_tenants.py",
+				"tests/api/v1/test_tenant.py"
+			],
+			"console": "integratedTerminal",
+			"justMyCode": false,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: ARQ Worker",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "arq",
+			"args": ["src.app.core.worker.settings.WorkerSettings"],
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: Create Superuser",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "src.scripts.create_first_superuser",
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		},
+		{
+			"name": "Python: Alembic Upgrade",
+			"type": "debugpy",
+			"request": "launch",
+			"module": "alembic",
+			"args": ["upgrade", "head"],
+			"console": "integratedTerminal",
+			"justMyCode": true,
+			"env": {
+				"PYTHONPATH": "${workspaceFolder}/src"
+			},
+			"envFile": "${workspaceFolder}/src/.env"
+		}
+	]
+}
