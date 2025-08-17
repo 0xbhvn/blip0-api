@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.logger import logging
+from ..core.plan_limits import get_plan_limits
 from ..core.redis_client import redis_client
 from ..crud.crud_tenant import CRUDTenant, crud_tenant
 from ..models.tenant import Tenant
@@ -41,38 +42,6 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
     Handles tenant management with Redis caching for configuration access.
     """
 
-    # Default plan limits configuration
-    DEFAULT_PLAN_LIMITS = {
-        "free": {
-            "monitors": 10,
-            "networks": 3,
-            "triggers": 20,
-            "api_calls": 1000,
-            "storage": 1.0
-        },
-        "starter": {
-            "monitors": 50,
-            "networks": 10,
-            "triggers": 100,
-            "api_calls": 10000,
-            "storage": 10.0
-        },
-        "pro": {
-            "monitors": 200,
-            "networks": 50,
-            "triggers": 500,
-            "api_calls": 100000,
-            "storage": 100.0
-        },
-        "enterprise": {
-            "monitors": 1000,
-            "networks": 200,
-            "triggers": 2000,
-            "api_calls": 1000000,
-            "storage": 1000.0
-        },
-    }
-
     def __init__(self, crud_tenant: CRUDTenant):
         """Initialize tenant service with CRUD dependency."""
         super().__init__(crud_tenant)
@@ -89,7 +58,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         Returns:
             Redis key string
         """
-        key_type = kwargs.get('key_type', 'config')
+        key_type = kwargs.get("key_type", "config")
         return f"tenant:{entity_id}:{key_type}"
 
     def get_cache_ttl(self) -> int:
@@ -126,10 +95,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         # Create tenant in PostgreSQL (source of truth)
         tenant_internal = TenantCreateInternal(**tenant_in.model_dump())
 
-        db_tenant = await self.crud_tenant.create(
-            db=db,
-            object=tenant_internal
-        )
+        db_tenant = await self.crud_tenant.create(db=db, object=tenant_internal)
 
         # Write-through to Redis for fast access
         await self._cache_tenant(db_tenant)
@@ -194,11 +160,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
             Updated tenant if found
         """
         # Update in PostgreSQL
-        db_tenant = await self.crud_tenant.update(
-            db=db,
-            object=tenant_update,
-            id=tenant_id
-        )
+        db_tenant = await self.crud_tenant.update(db=db, object=tenant_update, id=tenant_id)
 
         if not db_tenant:
             return None
@@ -234,11 +196,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
 
         # Delete from PostgreSQL
         try:
-            await self.crud_tenant.delete(
-                db=db,
-                id=tenant_id,
-                is_hard_delete=is_hard_delete
-            )
+            await self.crud_tenant.delete(db=db, id=tenant_id, is_hard_delete=is_hard_delete)
             deleted = True
         except Exception:
             deleted = False
@@ -275,18 +233,10 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         Returns:
             Paginated tenant list
         """
-        result = await self.crud_tenant.get_paginated(
-            db=db,
-            page=page,
-            size=size,
-            filters=filters,
-            sort=sort
-        )
+        result = await self.crud_tenant.get_paginated(db=db, page=page, size=size, filters=filters, sort=sort)
 
         # Convert models to schemas
-        result["items"] = [
-            TenantRead.model_validate(item) for item in result["items"]
-        ]
+        result["items"] = [TenantRead.model_validate(item) for item in result["items"]]
 
         return result
 
@@ -326,7 +276,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         try:
             # Handle different types that might be passed
             if isinstance(tenant, dict):
-                tenant_id = tenant.get('id')
+                tenant_id = tenant.get("id")
                 tenant_dict = TenantRead.model_validate(tenant).model_dump_json()
             else:
                 tenant_id = tenant.id
@@ -379,8 +329,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
                 count = await redis_client.delete_pattern(pattern)
                 deleted_count += count
 
-            logger.info(
-                f"Cleaned up {deleted_count} cache keys for tenant {tenant_id}")
+            logger.info(f"Cleaned up {deleted_count} cache keys for tenant {tenant_id}")
         except Exception as e:
             logger.error(f"Failed to cleanup tenant cache {tenant_id}: {e}")
 
@@ -447,7 +396,8 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
             name=None,
             slug=None,
             settings={"suspension_reason": request.reason, "suspended_at": datetime.now(UTC).isoformat()}
-            if request.reason else {"suspended_at": datetime.now(UTC).isoformat()}
+            if request.reason
+            else {"suspended_at": datetime.now(UTC).isoformat()},
         )
 
         updated_tenant = await self.update_tenant(db, tenant_id, tenant_update)
@@ -480,7 +430,8 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
             name=None,
             slug=None,
             settings={"activation_reason": request.reason, "activated_at": datetime.now(UTC).isoformat()}
-            if request.reason else {"activated_at": datetime.now(UTC).isoformat()}
+            if request.reason
+            else {"activated_at": datetime.now(UTC).isoformat()},
         )
 
         updated_tenant = await self.update_tenant(db, tenant_id, tenant_update)
@@ -519,11 +470,11 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         # Get current counts from database
         monitor_count_query = select(func.count(Monitor.id)).where(
             Monitor.tenant_id == tenant_id_uuid,
-            Monitor.active == True  # noqa: E712
+            Monitor.active == True,  # noqa: E712
         )
         trigger_count_query = select(func.count(Trigger.id)).where(
             Trigger.tenant_id == tenant_id_uuid,
-            Trigger.active == True  # noqa: E712
+            Trigger.active == True,  # noqa: E712
         )
 
         monitor_count_result = await db.execute(monitor_count_query)
@@ -541,10 +492,10 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
             api_calls_last_hour = 0
 
         # Get limits (use defaults if not set)
-        limits = tenant.limits if hasattr(tenant, 'limits') and tenant.limits else None
+        limits = tenant.limits if hasattr(tenant, "limits") and tenant.limits else None
 
-        # Use class constant for default limits
-        plan_limits = self.DEFAULT_PLAN_LIMITS.get(tenant.plan, self.DEFAULT_PLAN_LIMITS["free"])
+        # Use centralized plan limits
+        plan_limits = get_plan_limits(tenant.plan)
 
         monitors_limit = int(limits.max_monitors) if limits else int(plan_limits["monitors"])
         networks_limit = int(limits.max_networks) if limits else int(plan_limits["networks"])
@@ -553,7 +504,7 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         storage_limit = float(limits.max_storage_gb) if limits else float(plan_limits["storage"])
 
         # Calculate current storage (placeholder - would need actual calculation)
-        storage_used = float(limits.current_storage_gb) if limits and hasattr(limits, 'current_storage_gb') else 0.0
+        storage_used = float(limits.current_storage_gb) if limits and hasattr(limits, "current_storage_gb") else 0.0
 
         # Calculate remaining quotas
         monitors_remaining = max(0, monitors_limit - monitor_count)
@@ -626,9 +577,9 @@ class TenantService(BaseService[Tenant, TenantCreate, TenantUpdate, TenantRead])
         if not tenant:
             return None
 
-        # Use class constant for default limits
+        # Use centralized plan limits
         # Note: Keys differ here (max_ prefix) for TenantLimitsRead compatibility
-        plan_limits_raw = self.DEFAULT_PLAN_LIMITS.get(tenant.plan, self.DEFAULT_PLAN_LIMITS["free"])
+        plan_limits_raw = get_plan_limits(tenant.plan)
         plan_limits = {
             "max_monitors": plan_limits_raw["monitors"],
             "max_networks": plan_limits_raw["networks"],
