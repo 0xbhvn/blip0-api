@@ -92,6 +92,9 @@ ignore = [
     "F401", # unused import
     "F403", # star imports
 ]
+"tests/**/*.py" = [
+    "F811", # redefinition of unused variable (common with pytest fixtures)
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 24
