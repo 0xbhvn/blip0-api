@@ -4,6 +4,7 @@ from .audit import (
     MonitorMatch,
     TriggerExecution,
 )
+from .filter_script import FilterScript
 from .monitor import Monitor
 from .network import Network
 from .post import Post
