@@ -76,25 +76,15 @@ class FilterScriptService(BaseService):
         Returns:
             Created filter script with content
         """
-        # Generate script filename based on slug and language
-        script_filename = f"{script_in.slug}.{self._get_file_extension(script_in.language)}"
-        script_path = f"./config/filters/{script_filename}"
-        full_path = self.scripts_base_dir / script_filename
-
-        # Write script content to filesystem
-        try:
-            full_path.write_text(script_in.script_content)
-            # Set proper permissions (644 - read for all, write for owner only)
-            os.chmod(full_path, 0o644)
-        except Exception as e:
-            logger.error(f"Failed to write script file {full_path}: {e}")
-            raise ValueError(f"Failed to save script file: {str(e)}")
-
-        # Calculate file metadata
+        # Calculate file metadata first
         file_size_bytes = len(script_in.script_content.encode())
         file_hash = hashlib.sha256(script_in.script_content.encode()).hexdigest()
 
-        # Create database record
+        # Generate script filename based on slug and language
+        script_filename = f"{script_in.slug}.{self._get_file_extension(script_in.language)}"
+        script_path = f"./config/filters/{script_filename}"
+
+        # Create database record FIRST to check constraints
         script_internal = FilterScriptCreateInternal(
             **script_in.model_dump(exclude={"script_content"}),
             script_path=script_path,
@@ -106,6 +96,21 @@ class FilterScriptService(BaseService):
             db=db,
             object=script_internal
         )
+
+        # Only write file after database success
+        full_path = self.scripts_base_dir / script_filename
+        try:
+            full_path.write_text(script_in.script_content)
+            # Set proper permissions (644 - read for all, write for owner only)
+            os.chmod(full_path, 0o644)
+        except Exception as e:
+            # Rollback database record if file write fails
+            try:
+                await self.crud_filter_script.db_delete(db=db, id=str(db_script.id))
+            except Exception:
+                pass  # Best effort cleanup
+            logger.error(f"Failed to write script file {full_path}: {e}")
+            raise ValueError(f"Failed to save script file: {str(e)}")
 
         # Write-through to Redis for fast access
         await self._cache_filter_script(db_script)
@@ -187,62 +192,37 @@ class FilterScriptService(BaseService):
         if not hasattr(existing, 'script_path'):
             return None
 
-        # Handle script content update if provided
+        # Calculate file metadata if content is updated
         if script_update.script_content is not None:
-            # Update the file
-            existing_script_path = existing.script_path if hasattr(existing, 'script_path') else ""
-            full_path = Path(existing_script_path.replace("./", ""))
-            if not full_path.exists():
-                full_path = self.scripts_base_dir / Path(existing_script_path).name
-
-            try:
-                full_path.write_text(script_update.script_content)
-                os.chmod(full_path, 0o644)
-
-                # Update file metadata
-                file_size_bytes = len(script_update.script_content.encode())
-                file_hash = hashlib.sha256(script_update.script_content.encode()).hexdigest()
-            except Exception as e:
-                logger.error(f"Failed to update script file {full_path}: {e}")
-                raise ValueError(f"Failed to update script file: {str(e)}")
+            file_size_bytes = len(script_update.script_content.encode())
+            file_hash = hashlib.sha256(script_update.script_content.encode()).hexdigest()
         else:
             file_size_bytes = None
             file_hash = None
 
-        # Handle slug update (may require renaming file)
+        # Handle slug update (requires path update)
+        new_script_path = None
         if script_update.slug and hasattr(existing, 'slug') and script_update.slug != existing.slug:
-            if hasattr(existing, 'script_path'):
-                old_path = Path(existing.script_path.replace("./", ""))
-                if not old_path.exists():
-                    old_path = self.scripts_base_dir / Path(existing.script_path).name
+            language = (
+                script_update.language if script_update.language
+                else (existing.language if hasattr(existing, 'language') else 'bash')
+            )
+            new_filename = f"{script_update.slug}.{self._get_file_extension(language)}"
+            new_script_path = f"./config/filters/{new_filename}"
 
-                language = (
-                    script_update.language if script_update.language
-                    else (existing.language if hasattr(existing, 'language') else 'txt')
-                )
-                new_filename = f"{script_update.slug}.{self._get_file_extension(language)}"
-                new_path = self.scripts_base_dir / new_filename
+        # Create internal update with file metadata and new path
+        update_data = script_update.model_dump(exclude={"script_content"}, exclude_unset=True)
+        if new_script_path:
+            update_data["script_path"] = new_script_path
 
-                try:
-                    if old_path.exists():
-                        old_path.rename(new_path)
-                        script_update = FilterScriptUpdateInternal(
-                            **script_update.model_dump(exclude_unset=True),
-                            script_path=f"./config/filters/{new_filename}"
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to rename script file: {e}")
-                    raise ValueError(f"Failed to rename script file: {str(e)}")
-
-        # Create internal update with file metadata
         update_internal = FilterScriptUpdateInternal(
-            **script_update.model_dump(exclude={"script_content"}),
+            **update_data,
             file_size_bytes=file_size_bytes,
             file_hash=file_hash,
             validated=False,  # Reset validation on update
         )
 
-        # Update in database
+        # Update database record FIRST to check constraints
         db_script = await self.crud_filter_script.update(
             db=db,
             id=script_id,
@@ -251,6 +231,34 @@ class FilterScriptService(BaseService):
 
         if not db_script:
             return None
+
+        # Now handle file operations after database success
+        try:
+            # Handle script content update if provided
+            if script_update.script_content is not None:
+                existing_script_path = existing.script_path if hasattr(existing, 'script_path') else ""
+                full_path = Path(existing_script_path.replace("./", ""))
+                if not full_path.exists():
+                    full_path = self.scripts_base_dir / Path(existing_script_path).name
+
+                full_path.write_text(script_update.script_content)
+                os.chmod(full_path, 0o644)
+
+            # Handle slug/file rename if needed
+            if new_script_path and hasattr(existing, 'script_path'):
+                old_path = Path(existing.script_path.replace("./", ""))
+                if not old_path.exists():
+                    old_path = self.scripts_base_dir / Path(existing.script_path).name
+
+                new_path = self.scripts_base_dir / Path(new_script_path).name
+
+                if old_path.exists():
+                    old_path.rename(new_path)
+
+        except Exception as e:
+            logger.error(f"Failed to update script file: {e}")
+            # Don't raise ValueError, just log the error - DB update already succeeded
+            # The file operation is secondary to the database record
 
         # Invalidate cache
         await self._invalidate_cache(script_id)
@@ -486,7 +494,7 @@ class FilterScriptService(BaseService):
             Paginated filter scripts
         """
         # Get paginated results from CRUD
-        result = await self.crud_filter_script.get_multi(
+        result = await self.crud_filter_script.get_paginated(
             db=db,
             page=page,
             size=size,
