@@ -1,5 +1,6 @@
 """Test fixtures for admin API tests."""
 
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,7 +17,7 @@ def admin_user():
         "email": "admin@test.com",
         "name": "Admin User",
         "is_superuser": True,
-        "tenant_id": "00000000-0000-0000-0000-000000000000"
+        "tenant_id": "11111111-1111-1111-1111-111111111111",
     }
 
 
@@ -29,7 +30,7 @@ def normal_user():
         "email": "user@test.com",
         "name": "Normal User",
         "is_superuser": False,
-        "tenant_id": "11111111-1111-1111-1111-111111111111"
+        "tenant_id": "11111111-1111-1111-1111-111111111111",
     }
 
 
@@ -57,8 +58,6 @@ def normal_user_token(normal_user):
 
 @pytest.fixture
 def db_session():
-    """Mock database session."""
-    from unittest.mock import AsyncMock
-
+    """Mock database session for admin tests."""
     mock_session = AsyncMock()
     return mock_session

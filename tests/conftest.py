@@ -72,20 +72,14 @@ def sample_user_data():
 @pytest.fixture
 def sample_user_read():
     """Generate a sample UserRead object."""
-    import uuid
-
     from src.app.schemas.user import UserRead
 
     return UserRead(
         id=1,
-        uuid=uuid.uuid4(),
         name=fake.name(),
         username=fake.user_name(),
         email=fake.email(),
         profile_image_url=fake.image_url(),
-        is_superuser=False,
-        created_at=fake.date_time(),
-        updated_at=fake.date_time(),
         tier_id=None,
     )
 
@@ -103,6 +97,7 @@ def current_user_dict():
 
 
 # Additional fixtures for service layer testing
+
 
 @pytest.fixture
 def mock_redis_client():
@@ -126,6 +121,7 @@ def mock_redis_client():
 def sample_tenant_data():
     """Generate sample tenant data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "name": fake.company(),
@@ -141,6 +137,7 @@ def sample_tenant_data():
 def sample_monitor_data():
     """Generate sample monitor data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "tenant_id": uuid.uuid4(),
@@ -164,6 +161,7 @@ def sample_monitor_data():
 def sample_network_data():
     """Generate sample network data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "name": fake.name(),
@@ -181,6 +179,7 @@ def sample_network_data():
 def sample_trigger_data():
     """Generate sample trigger data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "tenant_id": uuid.uuid4(),
