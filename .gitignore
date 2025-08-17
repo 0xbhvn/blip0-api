@@ -130,6 +130,13 @@ cython_debug/
 # Macos
 .DS_Store
 
+# Ruff
 .ruff_cache
 
+# IDE settings
 .idea
+
+# Filter scripts
+config/filters/*.sh
+config/filters/*.py
+config/filters/*.js

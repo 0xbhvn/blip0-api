@@ -70,6 +70,11 @@ class NetworkBase(BaseModel):
 
 
 # Create schemas
+class NetworkCreateAdmin(NetworkBase):
+    """Schema for creating a new network via admin API (no tenant_id required)."""
+    pass
+
+
 class NetworkCreate(NetworkBase):
     """Schema for creating a new network."""
     tenant_id: uuid_pkg.UUID

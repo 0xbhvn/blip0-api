@@ -45,7 +45,16 @@ def override_dependency(dependency: Callable[..., Any], mocked_response: Any) ->
 @pytest.fixture
 def mock_db():
     """Mock database session for unit tests."""
-    return Mock(spec=AsyncSession)
+    mock = Mock(spec=AsyncSession)
+    # Add async context manager support for transactions
+    mock.begin = Mock(
+        return_value=AsyncMock(
+            __aenter__=AsyncMock(return_value=None),
+            __aexit__=AsyncMock(return_value=None)
+        )
+    )
+    mock.flush = AsyncMock(return_value=None)
+    return mock
 
 
 @pytest.fixture
@@ -72,20 +81,14 @@ def sample_user_data():
 @pytest.fixture
 def sample_user_read():
     """Generate a sample UserRead object."""
-    import uuid
-
     from src.app.schemas.user import UserRead
 
     return UserRead(
         id=1,
-        uuid=uuid.uuid4(),
         name=fake.name(),
         username=fake.user_name(),
         email=fake.email(),
         profile_image_url=fake.image_url(),
-        is_superuser=False,
-        created_at=fake.date_time(),
-        updated_at=fake.date_time(),
         tier_id=None,
     )
 
@@ -103,6 +106,7 @@ def current_user_dict():
 
 
 # Additional fixtures for service layer testing
+
 
 @pytest.fixture
 def mock_redis_client():
@@ -126,6 +130,7 @@ def mock_redis_client():
 def sample_tenant_data():
     """Generate sample tenant data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "name": fake.company(),
@@ -141,6 +146,7 @@ def sample_tenant_data():
 def sample_monitor_data():
     """Generate sample monitor data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "tenant_id": uuid.uuid4(),
@@ -164,6 +170,7 @@ def sample_monitor_data():
 def sample_network_data():
     """Generate sample network data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "name": fake.name(),
@@ -181,6 +188,7 @@ def sample_network_data():
 def sample_trigger_data():
     """Generate sample trigger data for tests."""
     import uuid
+
     return {
         "id": uuid.uuid4(),
         "tenant_id": uuid.uuid4(),

@@ -31,6 +31,14 @@ test-tenants-admin: ## Run admin tenant tests only
 test-tenants-self: ## Run self-service tenant tests only
 	uv run pytest tests/api/v1/test_tenant.py -v
 
+.PHONY: test-networks-admin
+test-networks-admin: ## Run admin network tests only
+	uv run pytest tests/api/admin/test_admin_networks.py -v
+
+.PHONY: test-filter-scripts-admin
+test-filter-scripts-admin: ## Run admin filter scripts tests only
+	uv run pytest tests/api/admin/test_admin_filter_scripts.py -v
+
 .PHONY: coverage
 coverage: ## Run tests with coverage report
 	uv run pytest --cov=src --cov-report=term-missing --cov-report=html
@@ -54,6 +62,14 @@ coverage-tenants-admin: ## Run admin tenant tests with coverage
 .PHONY: coverage-tenants-self
 coverage-tenants-self: ## Run self-service tenant tests with coverage
 	uv run pytest tests/api/v1/test_tenant.py --cov=src.app.api.v1.tenant --cov-report=term-missing
+
+.PHONY: coverage-networks-admin
+coverage-networks-admin: ## Run admin network tests with coverage
+	uv run pytest tests/api/admin/test_admin_networks.py --cov=src.app.api.admin.networks --cov-report=term-missing
+
+.PHONY: coverage-filter-scripts-admin
+coverage-filter-scripts-admin: ## Run admin filter scripts tests with coverage
+	uv run pytest tests/api/admin/test_admin_filter_scripts.py --cov=src.app.api.admin.filter_scripts --cov-report=term-missing
 
 .PHONY: coverage-html
 coverage-html: ## Generate HTML coverage report

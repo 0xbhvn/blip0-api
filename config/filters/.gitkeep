@@ -1,0 +1,3 @@
+# This directory stores filter script files
+# Filter scripts are executable files (bash/python/javascript) used by monitors
+# The actual script files are managed by the platform admin via the API
