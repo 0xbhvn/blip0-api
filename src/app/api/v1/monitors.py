@@ -7,6 +7,8 @@ import uuid as uuid_pkg
 from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...api.dependencies import get_current_user
@@ -32,6 +34,10 @@ from ...services.monitor_service import monitor_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/monitors", tags=["monitors"])
+
+# Constants for monitor state updates - only update specific fields
+PAUSE_MONITOR_UPDATE = MonitorUpdate(paused=True, active=False, name=None, slug=None)
+RESUME_MONITOR_UPDATE = MonitorUpdate(paused=False, active=True, name=None, slug=None)
 
 
 @router.get("", response_model=MonitorPagination)
@@ -200,9 +206,15 @@ async def create_monitor(
         )
         logger.info(f"Created monitor {monitor.id} for tenant {tenant_id}")
         return monitor
+    except ValidationError as e:
+        logger.warning(f"Monitor validation failed: {e}")
+        raise BadRequestException(f"Validation failed: {str(e)}")
+    except IntegrityError as e:
+        logger.warning(f"Monitor integrity constraint violated: {e}")
+        raise DuplicateValueException("Monitor with this configuration already exists")
     except Exception as e:
-        logger.error(f"Failed to create monitor: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create monitor")
+        logger.error(f"Failed to create monitor: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.put("/{monitor_id}", response_model=MonitorRead)
@@ -335,16 +347,10 @@ async def pause_monitor(
         raise BadRequestException("Invalid monitor ID format")
 
     # Update the monitor to set paused=True
-    monitor_update = MonitorUpdate(
-        name=None,
-        slug=None,
-        paused=True,
-        active=False,
-    )
     monitor = await monitor_service.update_monitor(
         db=db,
         monitor_id=monitor_id,
-        monitor_update=monitor_update,
+        monitor_update=PAUSE_MONITOR_UPDATE,
         tenant_id=tenant_id,
     )
 
@@ -380,16 +386,10 @@ async def resume_monitor(
         raise BadRequestException("Invalid monitor ID format")
 
     # Update the monitor to set paused=False and active=True
-    monitor_update = MonitorUpdate(
-        name=None,
-        slug=None,
-        paused=False,
-        active=True,
-    )
     monitor = await monitor_service.update_monitor(
         db=db,
         monitor_id=monitor_id,
-        monitor_update=monitor_update,
+        monitor_update=RESUME_MONITOR_UPDATE,
         tenant_id=tenant_id,
     )
 

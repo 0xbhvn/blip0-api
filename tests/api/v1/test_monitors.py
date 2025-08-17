@@ -431,7 +431,7 @@ class TestCreateMonitor:
             )
 
         assert exc_info.value.status_code == 500
-        assert exc_info.value.detail == "Failed to create monitor"
+        assert exc_info.value.detail == "Internal server error"
 
 
 class TestUpdateMonitor:
