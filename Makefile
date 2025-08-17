@@ -19,6 +19,18 @@ test-triggers: ## Run trigger tests only
 test-monitors: ## Run monitor tests only
 	uv run pytest tests/api/v1/test_monitors.py -v
 
+.PHONY: test-tenants
+test-tenants: ## Run all tenant tests (admin and self-service)
+	uv run pytest tests/api/admin/test_admin_tenants.py tests/api/v1/test_tenant.py -v
+
+.PHONY: test-tenants-admin
+test-tenants-admin: ## Run admin tenant tests only
+	uv run pytest tests/api/admin/test_admin_tenants.py -v
+
+.PHONY: test-tenants-self
+test-tenants-self: ## Run self-service tenant tests only
+	uv run pytest tests/api/v1/test_tenant.py -v
+
 .PHONY: coverage
 coverage: ## Run tests with coverage report
 	uv run pytest --cov=src --cov-report=term-missing --cov-report=html
@@ -30,6 +42,18 @@ coverage-triggers: ## Run trigger tests with coverage
 .PHONY: coverage-monitors
 coverage-monitors: ## Run monitor tests with coverage
 	uv run pytest tests/api/v1/test_monitors.py --cov=src.app.api.v1.monitors --cov-report=term-missing
+
+.PHONY: coverage-tenants
+coverage-tenants: ## Run all tenant tests with coverage
+	uv run pytest tests/api/admin/test_admin_tenants.py tests/api/v1/test_tenant.py --cov=src.app.api.admin.tenants --cov=src.app.api.v1.tenant --cov-report=term-missing
+
+.PHONY: coverage-tenants-admin
+coverage-tenants-admin: ## Run admin tenant tests with coverage
+	uv run pytest tests/api/admin/test_admin_tenants.py --cov=src.app.api.admin.tenants --cov-report=term-missing
+
+.PHONY: coverage-tenants-self
+coverage-tenants-self: ## Run self-service tenant tests with coverage
+	uv run pytest tests/api/v1/test_tenant.py --cov=src.app.api.v1.tenant --cov-report=term-missing
 
 .PHONY: coverage-html
 coverage-html: ## Generate HTML coverage report
