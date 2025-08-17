@@ -493,9 +493,9 @@ class TestCreateWebhookTrigger:
         """Test webhook trigger creation with invalid HTTP method."""
         # This should raise validation error from pydantic
         from pydantic import ValidationError
-        
+
         with pytest.raises(ValidationError):  # Will be pydantic validation error
-            invalid_webhook_config = WebhookTriggerBase(
+            WebhookTriggerBase(
                 url_type="Plain",
                 url_value="https://webhook.site/test",
                 method="INVALID",  # Invalid method
