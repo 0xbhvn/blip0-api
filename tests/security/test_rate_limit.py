@@ -9,7 +9,7 @@ from src.app.middleware.rate_limit import RateLimitMiddleware
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_headers(mock_redis):
+async def test_rate_limit_headers(fast_redis_mock):
     """Test that rate limit headers are included in responses."""
     # Test rate limit header structure
     headers = {
@@ -175,7 +175,7 @@ async def test_rate_limit_middleware_initialization():
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_excluded_paths(mock_redis):
+async def test_rate_limit_excluded_paths(fast_redis_mock):
     """Test that certain paths are excluded from rate limiting."""
     app = Mock()
     middleware = RateLimitMiddleware(

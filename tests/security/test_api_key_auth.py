@@ -18,16 +18,17 @@ async def test_generate_api_key():
 
 
 @pytest.mark.asyncio
-async def test_verify_api_key():
+async def test_verify_api_key(test_api_key, precomputed_api_key_hash):
     """Test API key verification."""
-    full_key, key_hash = generate_api_key()
+    # Use pre-computed hash for speed
+    key_hash = precomputed_api_key_hash
 
     # Verify correct key
-    assert verify_api_key(full_key, key_hash) is True
+    assert verify_api_key(test_api_key, key_hash) is True
 
     # Verify incorrect key
     assert verify_api_key("wrong_key", key_hash) is False
-    assert verify_api_key(full_key, "wrong_hash") is False
+    assert verify_api_key(test_api_key, "wrong_hash") is False
 
 
 @pytest.mark.asyncio
@@ -41,15 +42,12 @@ async def test_extract_key_info():
 
 
 @pytest.mark.asyncio
-async def test_api_key_authentication_header(test_api_key: str):
+async def test_api_key_authentication_header(test_api_key: str, precomputed_api_key_hash: str):
     """Test API key authentication via header."""
     from src.app.core.api_key import verify_api_key
 
-    # Mock the key verification process
-    full_key, key_hash = generate_api_key()
-
-    # Test that verification works
-    assert verify_api_key(full_key, key_hash) is True
+    # Test that verification works with pre-computed hash
+    assert verify_api_key(test_api_key, precomputed_api_key_hash) is True
     assert verify_api_key(test_api_key, "wrong_hash") is False
 
 

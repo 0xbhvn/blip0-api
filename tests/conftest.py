@@ -268,6 +268,20 @@ def mock_crud_trigger():
 
 # Security test fixtures
 
+# Performance optimization for bcrypt in tests
+@pytest.fixture(autouse=True)
+def optimize_bcrypt_for_tests(monkeypatch):
+    """Optimize bcrypt for faster test execution while maintaining functionality."""
+    import bcrypt
+
+    # Use minimum rounds for testing (4 rounds = ~1ms vs 12 rounds = 500ms)
+    original_gensalt = bcrypt.gensalt
+
+    def fast_gensalt(rounds: int = 4, prefix: bytes = b'2b'):
+        return original_gensalt(rounds=rounds, prefix=prefix)
+
+    monkeypatch.setattr(bcrypt, 'gensalt', fast_gensalt)
+
 
 @pytest.fixture
 def mock_user():
@@ -438,3 +452,78 @@ def tenant_a_api_key():
 def tenant_b_api_key():
     """Mock API key for tenant B."""
     return "blp0_tenant_b_key_abcdef1234567890"
+
+
+# Performance-optimized security fixtures
+@pytest.fixture(scope="session")
+def precomputed_password_hash():
+    """Pre-computed password hash to avoid bcrypt in every test."""
+    import bcrypt
+    password = "TestPassword123!"
+    # Use fast rounds for testing
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=4)).decode()
+
+
+@pytest.fixture(scope="session")
+def precomputed_api_key_hash():
+    """Pre-computed API key hash to avoid bcrypt in every test."""
+    import bcrypt
+    api_key = "blp0_test_key_1234567890abcdef"
+    return bcrypt.hashpw(api_key.encode(), bcrypt.gensalt(rounds=4)).decode()
+
+
+@pytest.fixture(scope="session")
+def mock_jwt_tokens():
+    """Pre-generated JWT tokens for testing."""
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+
+    secret = "test-secret-key"
+
+    # Access token (valid for 30 minutes)
+    access_payload = {
+        "sub": "testuser",
+        "token_type": "access",
+        "exp": datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=30)
+    }
+
+    # Refresh token (valid for 7 days)
+    refresh_payload = {
+        "sub": "testuser",
+        "token_type": "refresh",
+        "exp": datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
+    }
+
+    # Expired token
+    expired_payload = {
+        "sub": "testuser",
+        "token_type": "access",
+        "exp": datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+    }
+
+    return {
+        "access_token": jwt.encode(access_payload, secret, algorithm="HS256"),
+        "refresh_token": jwt.encode(refresh_payload, secret, algorithm="HS256"),
+        "expired_token": jwt.encode(expired_payload, secret, algorithm="HS256")
+    }
+
+
+@pytest.fixture
+def fast_redis_mock():
+    """High-performance Redis mock with instant responses."""
+    from unittest.mock import AsyncMock, Mock
+
+    mock_redis = Mock()
+
+    # Instant responses for all Redis operations
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.set = AsyncMock(return_value=True)
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock(return_value=True)
+    mock_redis.delete = AsyncMock(return_value=1)
+    mock_redis.sadd = AsyncMock(return_value=1)
+    mock_redis.srem = AsyncMock(return_value=1)
+    mock_redis.smembers = AsyncMock(return_value=set())
+
+    return mock_redis
