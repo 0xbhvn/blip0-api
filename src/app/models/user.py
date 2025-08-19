@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..core.db.database import Base
 
 if TYPE_CHECKING:
+    from .api_key import APIKey
     from .tenant import Tenant
 
 
@@ -49,9 +50,15 @@ class User(Base):
     tier_id: Mapped[int | None] = mapped_column(
         ForeignKey("tier.id"), index=True, default=None, init=False)
 
-    # Relationship to Tenant (excluded from init)
+    # Relationships (excluded from init)
     tenant: Mapped["Tenant | None"] = relationship(
         "Tenant",
         back_populates="users",
+        init=False
+    )
+    api_keys: Mapped[list["APIKey"]] = relationship(
+        "APIKey",
+        back_populates="user",
+        cascade="all, delete-orphan",
         init=False
     )

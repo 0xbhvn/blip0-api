@@ -264,3 +264,266 @@ def mock_crud_trigger():
     mock_crud.deactivate_trigger = AsyncMock()
     mock_crud.get_active_triggers_by_type = AsyncMock()
     return mock_crud
+
+
+# Security test fixtures
+
+# Performance optimization for bcrypt in tests
+@pytest.fixture(autouse=True)
+def optimize_bcrypt_for_tests(monkeypatch):
+    """Optimize bcrypt for faster test execution while maintaining functionality."""
+    import bcrypt
+
+    # Use minimum rounds for testing (4 rounds = ~1ms vs 12 rounds = 500ms)
+    original_gensalt = bcrypt.gensalt
+
+    def fast_gensalt(rounds: int = 4, prefix: bytes = b'2b'):
+        return original_gensalt(rounds=rounds, prefix=prefix)
+
+    monkeypatch.setattr(bcrypt, 'gensalt', fast_gensalt)
+
+
+@pytest.fixture
+def mock_user():
+    """Mock user object for tests."""
+    import uuid
+    return {
+        "id": 1,
+        "username": "testuser",
+        "email": "test@example.com",
+        "name": "Test User",
+        "tenant_id": uuid.uuid4(),
+        "is_superuser": False,
+        "role": "user",
+        "permissions": ["monitor:read", "monitor:write"]
+    }
+
+
+@pytest.fixture
+def mock_viewer_user():
+    """Mock viewer user for tests."""
+    import uuid
+    return {
+        "id": 2,
+        "username": "viewer",
+        "email": "viewer@example.com",
+        "name": "Viewer User",
+        "tenant_id": uuid.uuid4(),
+        "is_superuser": False,
+        "role": "viewer",
+        "permissions": ["monitor:read"]
+    }
+
+
+@pytest.fixture
+def mock_admin_user():
+    """Mock admin user for tests."""
+    import uuid
+    return {
+        "id": 3,
+        "username": "admin",
+        "email": "admin@example.com",
+        "name": "Admin User",
+        "tenant_id": uuid.uuid4(),
+        "is_superuser": False,
+        "role": "admin",
+        "permissions": ["monitor:read", "monitor:write", "monitor:delete", "admin:access"]
+    }
+
+
+@pytest.fixture
+def mock_superuser():
+    """Mock superuser for tests."""
+    import uuid
+    return {
+        "id": 4,
+        "username": "superuser",
+        "email": "superuser@example.com",
+        "name": "Super User",
+        "tenant_id": uuid.uuid4(),
+        "is_superuser": True,
+        "role": "superuser",
+        "permissions": ["*"]
+    }
+
+
+@pytest.fixture
+def viewer_headers(mock_viewer_user):
+    """Mock headers for viewer user."""
+    return {"Authorization": "Bearer mock_viewer_token"}
+
+
+@pytest.fixture
+def admin_headers(mock_admin_user):
+    """Mock headers for admin user."""
+    return {"Authorization": "Bearer mock_admin_token"}
+
+
+@pytest.fixture
+def auth_headers(mock_user):
+    """Mock auth headers for regular user."""
+    return {"Authorization": "Bearer mock_user_token"}
+
+
+@pytest.fixture
+def superuser_headers(mock_superuser):
+    """Mock headers for superuser."""
+    return {"Authorization": "Bearer mock_superuser_token"}
+
+
+@pytest.fixture
+def tenant_headers(mock_user):
+    """Mock headers for tenant user."""
+    return {"Authorization": "Bearer mock_tenant_token"}
+
+
+@pytest.fixture
+def user_headers_by_role():
+    """Mock headers for different user roles."""
+    return {
+        "viewer": {"Authorization": "Bearer mock_viewer_token"},
+        "user": {"Authorization": "Bearer mock_user_token"},
+        "admin": {"Authorization": "Bearer mock_admin_token"}
+    }
+
+
+@pytest.fixture
+def auth_headers_multi():
+    """Mock headers for multiple users."""
+    return {
+        "user_a": {"Authorization": "Bearer mock_user_a_token"},
+        "user_b": {"Authorization": "Bearer mock_user_b_token"},
+        "tenant_a": {"Authorization": "Bearer mock_tenant_a_token"},
+        "tenant_b": {"Authorization": "Bearer mock_tenant_b_token"}
+    }
+
+
+@pytest.fixture
+def free_tier_headers():
+    """Mock headers for free tier user."""
+    return {"Authorization": "Bearer mock_free_tier_token"}
+
+
+@pytest.fixture
+def pro_tier_headers():
+    """Mock headers for pro tier user."""
+    return {"Authorization": "Bearer mock_pro_tier_token"}
+
+
+@pytest.fixture
+def test_user():
+    """Mock test user with password for login tests."""
+    return {
+        "username": "testuser",
+        "email": "test@example.com",
+        "password": "TestPassword123!",
+        "name": "Test User"
+    }
+
+
+@pytest.fixture
+def test_api_key():
+    """Mock API key for testing."""
+    return "blp0_test_key_1234567890abcdef"
+
+
+@pytest.fixture
+def expired_api_key():
+    """Mock expired API key for testing."""
+    return "blp0_expired_key_abcdef1234567890"
+
+
+@pytest.fixture
+def scoped_api_key():
+    """Mock scoped API key for testing."""
+    return {
+        "key": "blp0_scoped_key_abcdef1234567890",
+        "scopes": ["monitor:read", "trigger:read"]
+    }
+
+
+@pytest.fixture
+def tenant_a_api_key():
+    """Mock API key for tenant A."""
+    return "blp0_tenant_a_key_1234567890abcdef"
+
+
+@pytest.fixture
+def tenant_b_api_key():
+    """Mock API key for tenant B."""
+    return "blp0_tenant_b_key_abcdef1234567890"
+
+
+# Performance-optimized security fixtures
+@pytest.fixture(scope="session")
+def precomputed_password_hash():
+    """Pre-computed password hash to avoid bcrypt in every test."""
+    import bcrypt
+    password = "TestPassword123!"
+    # Use fast rounds for testing
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=4)).decode()
+
+
+@pytest.fixture(scope="session")
+def precomputed_api_key_hash():
+    """Pre-computed API key hash to avoid bcrypt in every test."""
+    import bcrypt
+    api_key = "blp0_test_key_1234567890abcdef"
+    return bcrypt.hashpw(api_key.encode(), bcrypt.gensalt(rounds=4)).decode()
+
+
+@pytest.fixture(scope="session")
+def mock_jwt_tokens():
+    """Pre-generated JWT tokens for testing."""
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+
+    secret = "test-secret-key"
+
+    # Access token (valid for 30 minutes)
+    access_payload = {
+        "sub": "testuser",
+        "token_type": "access",
+        "exp": datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=30)
+    }
+
+    # Refresh token (valid for 7 days)
+    refresh_payload = {
+        "sub": "testuser",
+        "token_type": "refresh",
+        "exp": datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
+    }
+
+    # Expired token
+    expired_payload = {
+        "sub": "testuser",
+        "token_type": "access",
+        "exp": datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+    }
+
+    return {
+        "access_token": jwt.encode(access_payload, secret, algorithm="HS256"),
+        "refresh_token": jwt.encode(refresh_payload, secret, algorithm="HS256"),
+        "expired_token": jwt.encode(expired_payload, secret, algorithm="HS256")
+    }
+
+
+@pytest.fixture
+def fast_redis_mock():
+    """High-performance Redis mock with instant responses."""
+    from unittest.mock import AsyncMock, Mock
+
+    mock_redis = Mock()
+
+    # Instant responses for all Redis operations
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.set = AsyncMock(return_value=True)
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock(return_value=True)
+    mock_redis.delete = AsyncMock(return_value=1)
+    mock_redis.sadd = AsyncMock(return_value=1)
+    mock_redis.srem = AsyncMock(return_value=1)
+    mock_redis.smembers = AsyncMock(return_value=set())
+
+    return mock_redis

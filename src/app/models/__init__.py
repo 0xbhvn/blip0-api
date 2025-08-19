@@ -1,8 +1,10 @@
+from .api_key import APIKey
 from .audit import (
     BlockState,
     MissedBlock,
     MonitorMatch,
     TriggerExecution,
+    UserAuditLog,
 )
 from .filter_script import FilterScript
 from .monitor import Monitor
