@@ -94,27 +94,26 @@ async def test_tenant_context_in_request():
 @pytest.mark.asyncio
 async def test_rls_context():
     """Test RLS context management."""
-    context = RLSContext.get_instance()
-
     # Set context
     tenant_id = uuid.uuid4()
     user_id = 1
-    context.set_context(
+    RLSContext.set_context(
         tenant_id=tenant_id,
         user_id=user_id,
         is_superuser=False,
         bypass_rls=False
     )
 
-    assert context.tenant_id == tenant_id
-    assert context.user_id == user_id
-    assert context.is_superuser is False
-    assert context.bypass_rls is False
+    # Check context values
+    assert RLSContext.get_tenant_id() == tenant_id
+    assert RLSContext.get_user_id() == user_id
+    assert RLSContext.is_superuser() is False
+    assert RLSContext.should_bypass_rls() is False
 
     # Clear context
-    context.clear_context()
-    assert context.tenant_id is None
-    assert context.user_id is None
+    RLSContext.clear_context()
+    assert RLSContext.get_tenant_id() is None
+    assert RLSContext.get_user_id() is None
 
 
 @pytest.mark.asyncio
@@ -164,31 +163,29 @@ async def test_tenant_data_filtering():
     # This test focuses on the RLS logic rather than HTTP calls
     from src.app.middleware.rls import RLSContext
 
-    context = RLSContext.get_instance()
-
     # Test tenant filtering logic
     tenant_a_id = uuid.uuid4()
     tenant_b_id = uuid.uuid4()
 
     # Set context for tenant A
-    context.set_context(
+    RLSContext.set_context(
         tenant_id=tenant_a_id,
         user_id=1,
         is_superuser=False,
         bypass_rls=False
     )
 
-    assert context.tenant_id == tenant_a_id
-    assert context.bypass_rls is False
+    assert RLSContext.get_tenant_id() == tenant_a_id
+    assert RLSContext.should_bypass_rls() is False
 
     # Clear and set context for tenant B
-    context.clear_context()
-    context.set_context(
+    RLSContext.clear_context()
+    RLSContext.set_context(
         tenant_id=tenant_b_id,
         user_id=2,
         is_superuser=False,
         bypass_rls=False
     )
 
-    assert context.tenant_id == tenant_b_id
-    assert context.user_id == 2
+    assert RLSContext.get_tenant_id() == tenant_b_id
+    assert RLSContext.get_user_id() == 2

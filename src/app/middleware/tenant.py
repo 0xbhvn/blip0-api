@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.types import ASGIApp
 
 from ..core.logger import logging
+from ..models.audit import UserAuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,18 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
                                      request.query_params.get("tenant_id")
                     if requested_tenant:
                         try:
-                            tenant_id = uuid.UUID(requested_tenant)
-                            logger.info(f"Superuser operating on tenant: {tenant_id}")
+                            requested_tenant_id = uuid.UUID(requested_tenant)
+                            user_id = user.get("id")
+                            # Only audit if we have a valid user_id
+                            if user_id is not None:
+                                await self._audit_tenant_switch(
+                                    request=request,
+                                    user_id=user_id,
+                                    original_tenant_id=tenant_id,
+                                    target_tenant_id=requested_tenant_id
+                                )
+                            tenant_id = requested_tenant_id
+                            logger.info(f"Superuser {user_id} switched to tenant: {tenant_id}")
                         except ValueError:
                             logger.warning(f"Invalid tenant ID format: {requested_tenant}")
 
@@ -103,6 +114,65 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
                 response.headers["X-Tenant-Slug"] = tenant_slug
 
         return response
+
+    async def _audit_tenant_switch(
+        self,
+        request: Request,
+        user_id: int,
+        original_tenant_id: Optional[uuid.UUID],
+        target_tenant_id: uuid.UUID
+    ) -> None:
+        """Create audit log entry for superuser tenant switch.
+
+        Parameters
+        ----------
+        request : Request
+            The incoming request.
+        user_id : int
+            The superuser's ID.
+        original_tenant_id : Optional[uuid.UUID]
+            The user's original tenant ID.
+        target_tenant_id : uuid.UUID
+            The tenant ID being switched to.
+        """
+        try:
+            # Get database session
+            from ..core.db.database import async_get_db
+            async for db in async_get_db():
+                # Extract request metadata
+                ip_address = request.client.host if request.client else None
+                user_agent = request.headers.get("User-Agent", "")[:500]  # Limit to 500 chars
+
+                # Create audit log entry
+                audit_log = UserAuditLog(
+                    user_id=user_id,
+                    action="tenant_switch",
+                    resource_type="tenant",
+                    resource_id=str(target_tenant_id),
+                    target_tenant_id=target_tenant_id,
+                    details={
+                        "original_tenant_id": str(original_tenant_id) if original_tenant_id else None,
+                        "method": request.method,
+                        "path": str(request.url.path),
+                        "query_params": dict(request.query_params),
+                        "switch_source": "header" if "X-Tenant-ID" in request.headers else "query_param"
+                    },
+                    ip_address=ip_address,
+                    user_agent=user_agent
+                )
+
+                db.add(audit_log)
+                await db.commit()
+
+                logger.info(
+                    f"Audit log created for superuser tenant switch: "
+                    f"user={user_id}, from={original_tenant_id}, to={target_tenant_id}"
+                )
+                break  # Exit after first iteration
+
+        except Exception as e:
+            # Log error but don't fail the request
+            logger.error(f"Failed to create audit log for tenant switch: {e}")
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):

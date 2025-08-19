@@ -4,6 +4,7 @@ from .audit import (
     MissedBlock,
     MonitorMatch,
     TriggerExecution,
+    UserAuditLog,
 )
 from .filter_script import FilterScript
 from .monitor import Monitor

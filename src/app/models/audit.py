@@ -21,6 +21,86 @@ from sqlalchemy.orm import Mapped, mapped_column
 from ..core.db.database import Base
 
 
+class UserAuditLog(Base):
+    """
+    Audit log for user actions, especially administrative and security-critical operations.
+    This includes superuser tenant switches, API key operations, and permission changes.
+    """
+    __tablename__ = "user_audit_logs"
+
+    # Required fields first (no defaults)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+        comment="User who performed the action"
+    )
+    action: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True,
+        comment="Action type (e.g., 'tenant_switch', 'api_key_create', 'permission_grant')"
+    )
+    resource_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="Type of resource affected (e.g., 'tenant', 'api_key', 'user')"
+    )
+
+    # Optional/nullable fields
+    resource_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="ID of the affected resource"
+    )
+    target_tenant_id: Mapped[uuid_pkg.UUID | None] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=True,
+        index=True,
+        comment="Target tenant for cross-tenant operations"
+    )
+    details: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Additional details about the action"
+    )
+    ip_address: Mapped[str | None] = mapped_column(
+        String(45),  # Supports IPv6
+        nullable=True,
+        comment="IP address of the user"
+    )
+    user_agent: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="User agent string"
+    )
+
+    # Primary key with default
+    id: Mapped[uuid_pkg.UUID] = mapped_column(
+        default_factory=uuid_pkg.uuid4,
+        primary_key=True,
+        unique=True
+    )
+
+    # Timestamp - audit logs should be immutable
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default_factory=lambda: datetime.now(UTC),
+        server_default="NOW()",
+        comment="When the action occurred"
+    )
+
+    # Table constraints and indexes
+    __table_args__ = (
+        # Composite indexes for common query patterns
+        Index("idx_user_audit_user_action", "user_id", "action"),
+        Index("idx_user_audit_created", "created_at"),
+        Index("idx_user_audit_target_tenant", "target_tenant_id", "created_at"),
+        {"comment": "Immutable audit log for security-critical user actions"},
+    )
+
+
 class BlockState(Base):
     """
     Block processing state per network per tenant.

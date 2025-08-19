@@ -1,6 +1,7 @@
 """Row-Level Security (RLS) middleware for enforcing data access policies."""
 
 import uuid
+from contextvars import ContextVar
 from typing import Any, Optional
 
 from fastapi import HTTPException, Request, Response, status
@@ -13,33 +14,24 @@ from ..core.logger import logging
 
 logger = logging.getLogger(__name__)
 
+# Context variables for async-safe request-scoped RLS context
+_tenant_id_context: ContextVar[Optional[uuid.UUID]] = ContextVar('rls_tenant_id', default=None)
+_user_id_context: ContextVar[Optional[int]] = ContextVar('rls_user_id', default=None)
+_is_superuser_context: ContextVar[bool] = ContextVar('rls_is_superuser', default=False)
+_bypass_rls_context: ContextVar[bool] = ContextVar('rls_bypass', default=False)
+
 
 class RLSContext:
-    """Thread-local context for RLS enforcement."""
+    """Async-safe context for RLS enforcement using contextvars."""
 
-    _instance: Optional["RLSContext"] = None
-
-    def __init__(self) -> None:
-        self.tenant_id: Optional[uuid.UUID] = None
-        self.user_id: Optional[int] = None
-        self.is_superuser: bool = False
-        self.bypass_rls: bool = False
-
-    @classmethod
-    def get_instance(cls) -> "RLSContext":
-        """Get singleton instance of RLS context."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
+    @staticmethod
     def set_context(
-        self,
         tenant_id: Optional[uuid.UUID] = None,
         user_id: Optional[int] = None,
         is_superuser: bool = False,
         bypass_rls: bool = False
     ) -> None:
-        """Set the RLS context for the current request.
+        """Set the RLS context for the current async request.
 
         Parameters
         ----------
@@ -52,17 +44,38 @@ class RLSContext:
         bypass_rls : bool
             Whether to bypass RLS checks (for system operations).
         """
-        self.tenant_id = tenant_id
-        self.user_id = user_id
-        self.is_superuser = is_superuser
-        self.bypass_rls = bypass_rls
+        _tenant_id_context.set(tenant_id)
+        _user_id_context.set(user_id)
+        _is_superuser_context.set(is_superuser)
+        _bypass_rls_context.set(bypass_rls)
 
-    def clear_context(self) -> None:
+    @staticmethod
+    def get_tenant_id() -> Optional[uuid.UUID]:
+        """Get the current request's tenant ID."""
+        return _tenant_id_context.get()
+
+    @staticmethod
+    def get_user_id() -> Optional[int]:
+        """Get the current request's user ID."""
+        return _user_id_context.get()
+
+    @staticmethod
+    def is_superuser() -> bool:
+        """Check if the current request is from a superuser."""
+        return _is_superuser_context.get()
+
+    @staticmethod
+    def should_bypass_rls() -> bool:
+        """Check if RLS should be bypassed for the current request."""
+        return _bypass_rls_context.get()
+
+    @staticmethod
+    def clear_context() -> None:
         """Clear the RLS context after request processing."""
-        self.tenant_id = None
-        self.user_id = None
-        self.is_superuser = False
-        self.bypass_rls = False
+        _tenant_id_context.set(None)
+        _user_id_context.set(None)
+        _is_superuser_context.set(False)
+        _bypass_rls_context.set(False)
 
 
 class RowLevelSecurityMiddleware(BaseHTTPMiddleware):
@@ -95,7 +108,6 @@ class RowLevelSecurityMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.enforce_tenant_isolation = enforce_tenant_isolation
         self.allow_superuser_bypass = allow_superuser_bypass
-        self.rls_context = RLSContext.get_instance()
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Process the request with RLS enforcement.
@@ -125,7 +137,7 @@ class RowLevelSecurityMiddleware(BaseHTTPMiddleware):
 
         # Set RLS context
         bypass_rls = is_superuser and self.allow_superuser_bypass
-        self.rls_context.set_context(
+        RLSContext.set_context(
             tenant_id=tenant_id,
             user_id=user_id,
             is_superuser=is_superuser,
@@ -165,7 +177,7 @@ class RowLevelSecurityMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             # Clear RLS context after request
-            self.rls_context.clear_context()
+            RLSContext.clear_context()
 
 
 def apply_tenant_filter(query: Query, model_class: Any) -> Query:
@@ -186,16 +198,15 @@ def apply_tenant_filter(query: Query, model_class: Any) -> Query:
     Query
         The filtered query.
     """
-    rls_context = RLSContext.get_instance()
-
     # Skip filtering if RLS is bypassed
-    if rls_context.bypass_rls:
+    if RLSContext.should_bypass_rls():
         return query
 
     # Apply tenant filter if tenant_id is set and model has tenant_id column
-    if rls_context.tenant_id and hasattr(model_class, "tenant_id"):
-        query = query.filter(model_class.tenant_id == rls_context.tenant_id)
-        logger.debug(f"Applied tenant filter: {rls_context.tenant_id}")
+    tenant_id = RLSContext.get_tenant_id()
+    if tenant_id and hasattr(model_class, "tenant_id"):
+        query = query.filter(model_class.tenant_id == tenant_id)
+        logger.debug(f"Applied tenant filter: {tenant_id}")
 
     return query
 
@@ -229,16 +240,14 @@ def check_resource_access(
     HTTPException
         If access is denied and raise_on_failure is True.
     """
-    rls_context = RLSContext.get_instance()
-
     # Use context values if not provided
     if user_id is None:
-        user_id = rls_context.user_id
+        user_id = RLSContext.get_user_id()
     if tenant_id is None:
-        tenant_id = rls_context.tenant_id
+        tenant_id = RLSContext.get_tenant_id()
 
     # Superusers with bypass can access anything
-    if rls_context.bypass_rls:
+    if RLSContext.should_bypass_rls():
         return True
 
     # Check tenant isolation
@@ -292,8 +301,8 @@ def setup_sqlalchemy_rls_events(engine: Any) -> None:
     @event.listens_for(Session, "after_begin")
     def receive_after_begin(session: Session, transaction: Any, connection: Any) -> None:
         """Set session-level RLS configuration after transaction begins."""
-        rls_context = RLSContext.get_instance()
-        if rls_context.tenant_id and not rls_context.bypass_rls:
+        tenant_id = RLSContext.get_tenant_id()
+        if tenant_id and not RLSContext.should_bypass_rls():
             # Store tenant_id in session info for reference
-            session.info["tenant_id"] = rls_context.tenant_id
+            session.info["tenant_id"] = tenant_id
             session.info["enforce_rls"] = True
