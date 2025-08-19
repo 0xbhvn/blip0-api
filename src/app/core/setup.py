@@ -19,7 +19,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..api.dependencies import get_current_superuser
 from ..core.utils.rate_limit import rate_limiter
-from ..middleware.client_cache_middleware import ClientCacheMiddleware
+from ..middleware import (
+    AuditLoggingMiddleware,
+    ClientCacheMiddleware,
+    RateLimitMiddleware,
+    RequestLoggingMiddleware,
+    RowLevelSecurityMiddleware,
+    TenantIsolationMiddleware,
+)
 from ..models import *  # noqa: F403
 from .config import (
     AppSettings,
@@ -330,9 +337,51 @@ def create_application(
     application.add_exception_handler(Exception, general_exception_handler)
 
     # Add middlewares (order matters - last added is outermost/first to execute)
+
+    # Client-side caching (innermost - runs last on request, first on response)
     if isinstance(settings, ClientSideCacheSettings):
         application.add_middleware(
             ClientCacheMiddleware, max_age=settings.CLIENT_CACHE_MAX_AGE)  # type: ignore
+
+    # Row-Level Security middleware
+    application.add_middleware(
+        RowLevelSecurityMiddleware,
+        enforce_tenant_isolation=True,
+        allow_superuser_bypass=True
+    )
+
+    # Tenant isolation middleware
+    application.add_middleware(
+        TenantIsolationMiddleware,
+        allow_cross_tenant_superuser=True
+    )
+
+    # Rate limiting middleware
+    if isinstance(settings, RedisRateLimiterSettings):
+        # Import the global settings to get default rate limit values
+        from .config import settings as global_settings
+        application.add_middleware(
+            RateLimitMiddleware,
+            default_limit=getattr(global_settings, 'DEFAULT_RATE_LIMIT_LIMIT', 10),
+            default_period=getattr(global_settings, 'DEFAULT_RATE_LIMIT_PERIOD', 3600),
+            enable_headers=True
+        )
+
+    # Request logging middleware
+    if hasattr(settings, "ENVIRONMENT") and settings.ENVIRONMENT != EnvironmentOption.PRODUCTION:
+        # More verbose logging in non-production
+        application.add_middleware(
+            RequestLoggingMiddleware,
+            log_level="DEBUG",
+            log_request_body=False,
+            log_response_body=False
+        )
+    else:
+        # Audit logging only in production
+        application.add_middleware(
+            AuditLoggingMiddleware,
+            log_all_mutations=True
+        )
 
     # Add CORS middleware
     if isinstance(settings, CORSSettings) and settings.CORS_ENABLED:
@@ -346,7 +395,7 @@ def create_application(
             max_age=settings.CORS_MAX_AGE,
         )
 
-    # Add Request ID middleware (should be one of the first to execute)
+    # Add Request ID middleware (should be one of the first to execute - outermost)
     application.add_middleware(RequestIDMiddleware)
 
     if isinstance(settings, EnvironmentSettings):

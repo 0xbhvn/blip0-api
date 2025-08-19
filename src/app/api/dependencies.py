@@ -1,8 +1,10 @@
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Optional, cast
 
 from fastapi import Depends, HTTPException, Request
+from fastapi.security import APIKeyHeader, APIKeyQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.api_key import authenticate_api_key
 from ..core.config import settings
 from ..core.db.database import async_get_db
 from ..core.exceptions.http_exceptions import ForbiddenException, RateLimitException, UnauthorizedException
@@ -20,8 +22,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_LIMIT = settings.DEFAULT_RATE_LIMIT_LIMIT
 DEFAULT_PERIOD = settings.DEFAULT_RATE_LIMIT_PERIOD
 
+# API Key security schemes
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+api_key_query = APIKeyQuery(name="api_key", auto_error=False)
 
-async def get_current_user(
+
+async def get_current_user_jwt(
     token: Annotated[str, Depends(oauth2_scheme)], db: Annotated[AsyncSession, Depends(async_get_db)]
 ) -> dict[str, Any] | None:
     token_data = await verify_token(token, TokenType.ACCESS, db)
@@ -39,6 +45,72 @@ async def get_current_user(
     raise UnauthorizedException("User not authenticated.")
 
 
+async def get_current_user(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(async_get_db)],
+    token: Annotated[Optional[str], Depends(oauth2_scheme)] = None,
+    api_key_from_header: Annotated[Optional[str], Depends(api_key_header)] = None,
+    api_key_from_query: Annotated[Optional[str], Depends(api_key_query)] = None,
+) -> dict[str, Any]:
+    """Get current user from either JWT token or API key.
+
+    This function tries authentication in the following order:
+    1. JWT token from Authorization header
+    2. API key from X-API-Key header
+    3. API key from query parameter
+
+    Parameters
+    ----------
+    request : Request
+        The FastAPI request object.
+    db : AsyncSession
+        Database session.
+    token : Optional[str]
+        JWT token from Authorization header.
+    api_key_from_header : Optional[str]
+        API key from X-API-Key header.
+    api_key_from_query : Optional[str]
+        API key from query parameter.
+
+    Returns
+    -------
+    dict[str, Any]
+        The authenticated user dictionary.
+
+    Raises
+    ------
+    UnauthorizedException
+        If no valid authentication is provided.
+    """
+    # Try JWT token first
+    if token:
+        token_data = await verify_token(token, TokenType.ACCESS, db)
+        if token_data:
+            if "@" in token_data.username_or_email:
+                user = await crud_users.get(db=db, email=token_data.username_or_email, is_deleted=False)
+            else:
+                user = await crud_users.get(db=db, username=token_data.username_or_email, is_deleted=False)
+
+            if user:
+                user_dict = cast(dict[str, Any], user)
+                # Store user in request state for middleware
+                request.state.user = user_dict
+                return user_dict
+
+    # Try API key authentication
+    if api_key_from_header or api_key_from_query:
+        user = await authenticate_api_key(
+            request, db, api_key_from_header, api_key_from_query
+        )
+        if user:
+            # Store user in request state for middleware
+            request.state.user = user
+            return user
+
+    # No valid authentication found
+    raise UnauthorizedException("User not authenticated. Please provide a valid JWT token or API key.")
+
+
 async def get_optional_user(request: Request, db: AsyncSession = Depends(async_get_db)) -> dict | None:
     token = request.headers.get("Authorization")
     if not token:
@@ -53,7 +125,7 @@ async def get_optional_user(request: Request, db: AsyncSession = Depends(async_g
         if token_data is None:
             return None
 
-        return await get_current_user(token_value, db=db)
+        return await get_current_user(request, db, token=token_value)
 
     except HTTPException as http_exc:
         if http_exc.status_code != 401:
