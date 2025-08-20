@@ -289,7 +289,8 @@ class TestWorkerSettingsImports:
         """Test that importing WorkerSettings doesn't cause circular imports."""
         try:
             # This should not raise ImportError due to circular imports
-            from src.app.core.worker.functions import sample_background_task, shutdown, startup
+            # Import to test that no circular imports occur
+            import src.app.core.worker.functions  # noqa: F401
             from src.app.core.worker.settings import WorkerSettings
 
             # Should be able to access all components without issues

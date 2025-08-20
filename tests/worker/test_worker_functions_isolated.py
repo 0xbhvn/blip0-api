@@ -113,9 +113,9 @@ class TestWorkerFunctionsIsolated:
         assert 'ctx' in params
         assert 'name' in params
         assert len(params) == 2
-        assert params['ctx'].annotation == Worker
-        assert params['name'].annotation == str
-        assert sig.return_annotation == str
+        assert params['ctx'].annotation is Worker
+        assert params['name'].annotation is str
+        assert sig.return_annotation is str
 
         # Test startup signature
         sig = inspect.signature(startup)

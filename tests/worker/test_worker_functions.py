@@ -431,10 +431,10 @@ class TestWorkerFunctionTypes:
 
         # Check parameter annotations
         assert params['ctx'].annotation == Worker
-        assert params['name'].annotation == str
+        assert params['name'].annotation is str
 
         # Check return annotation
-        assert sig.return_annotation == str
+        assert sig.return_annotation is str
 
     def test_startup_function_signature(self):
         """Test startup function signature."""

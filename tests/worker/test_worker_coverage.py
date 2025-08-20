@@ -97,8 +97,8 @@ def test_function_signatures():
     assert 'ctx' in params
     assert 'name' in params
     assert params['ctx'].annotation == Worker
-    assert params['name'].annotation == str
-    assert sig.return_annotation == str
+    assert params['name'].annotation is str
+    assert sig.return_annotation is str
 
     # Test startup signature
     sig = inspect.signature(startup)

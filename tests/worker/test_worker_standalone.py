@@ -216,8 +216,10 @@ def test_worker_configuration_completeness():
     class CompleteWorkerSettings:
         functions = [lambda ctx, name: f"Task {name}"]
         redis_settings = RedisSettings(host="localhost", port=6379)
-        on_startup = lambda ctx: None
-        on_shutdown = lambda ctx: None
+        @staticmethod
+        def on_startup(ctx): return None
+        @staticmethod
+        def on_shutdown(ctx): return None
         handle_signals = False
 
     # Verify all required attributes exist
@@ -250,8 +252,8 @@ async def test_job_lifecycle_simulation():
             self.function_name = function_name
             self.args = args
             self.status = JobStatus.QUEUED
-            self.result = None
-            self.error = None
+            self.result: str | None = None
+            self.error: str | None = None
 
     # Create a job
     job = MockJob("job-123", "sample_task", ("test_param",))
@@ -372,18 +374,18 @@ def test_function_type_annotations():
     assert 'ctx' in type_hints
     assert type_hints['ctx'] == Worker
     assert 'name' in type_hints
-    assert type_hints['name'] == str
-    assert type_hints['return'] == str
+    assert type_hints['name'] is str
+    assert type_hints['return'] is str
 
     # Test startup_func annotations
     type_hints = get_type_hints(startup_func)
     assert type_hints['ctx'] == Worker
-    assert type_hints['return'] == type(None)
+    assert type_hints['return'] is type(None)
 
     # Test shutdown_func annotations
     type_hints = get_type_hints(shutdown_func)
     assert type_hints['ctx'] == Worker
-    assert type_hints['return'] == type(None)
+    assert type_hints['return'] is type(None)
 
 
 @pytest.mark.asyncio
