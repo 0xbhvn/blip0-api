@@ -30,7 +30,7 @@ class UserAuditLog(Base):
 
     # Required fields first (no defaults)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"),
+        ForeignKey("user.id"),
         nullable=False,
         index=True,
         comment="User who performed the action"

@@ -1,41 +1,110 @@
-from collections.abc import Callable, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import pytest_asyncio
 from faker import Faker
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import Session
+from sqlalchemy.pool import StaticPool
 
-from src.app.core.config import settings
+from src.app.core.db.database import Base
 from src.app.main import app
+from tests.test_config import test_settings
 
-DATABASE_URI = settings.POSTGRES_URI
-DATABASE_PREFIX = settings.POSTGRES_SYNC_PREFIX
+# Use test database configuration
+DATABASE_URI = test_settings.TEST_DATABASE_URI
+DATABASE_SYNC_PREFIX = test_settings.TEST_POSTGRES_SYNC_PREFIX
+DATABASE_ASYNC_PREFIX = test_settings.TEST_POSTGRES_ASYNC_PREFIX
 
-sync_engine = create_engine(DATABASE_PREFIX + DATABASE_URI)
+# Create test engines with connection pooling optimized for tests
+sync_engine = create_engine(
+    DATABASE_SYNC_PREFIX + DATABASE_URI,
+    poolclass=StaticPool,  # Use StaticPool for testing
+    connect_args={"options": "-c timezone=utc"},
+)
+async_engine = create_async_engine(
+    DATABASE_ASYNC_PREFIX + DATABASE_URI,
+    poolclass=StaticPool,
+    connect_args={"server_settings": {"timezone": "utc"}},
+)
+
+# Session factories
 local_session = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+async_session_factory = async_sessionmaker(
+    async_engine,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+)
 
 
 fake = Faker()
 
 
 @pytest.fixture(scope="session")
-def client() -> Generator[TestClient, Any, None]:
-    with TestClient(app) as _client:
-        yield _client
-    app.dependency_overrides = {}
+def setup_test_database():
+    """Create test database tables before running tests."""
+    # Create all tables in the test database
+    Base.metadata.create_all(bind=sync_engine)
+    yield
+    # Drop all tables after tests complete
+    Base.metadata.drop_all(bind=sync_engine)
     sync_engine.dispose()
 
 
-@pytest.fixture
-def db() -> Generator[Session, Any, None]:
-    session = local_session()
+@pytest_asyncio.fixture(scope="function")
+async def async_db(setup_test_database) -> AsyncGenerator[AsyncSession, None]:
+    """
+    Async database session with transaction rollback for test isolation.
+
+    Each test runs in its own transaction that gets rolled back after the test,
+    ensuring complete isolation between tests.
+    """
+    async with async_engine.connect() as connection:
+        # Begin a transaction
+        async with connection.begin() as transaction:
+            # Create a session bound to this connection
+            async_session = async_session_factory(bind=connection)
+
+            # Make the session available to the test
+            yield async_session
+
+            # Rollback the transaction after the test
+            await transaction.rollback()
+            await async_session.close()
+
+
+@pytest.fixture(scope="function")
+def db(setup_test_database) -> Generator[Session, Any, None]:
+    """
+    Synchronous database session with transaction rollback for test isolation.
+    """
+    connection = sync_engine.connect()
+    transaction = connection.begin()
+
+    # Configure the session to use our connection
+    session = Session(bind=connection)
+
+    # Make session available to test
     yield session
+
+    # Rollback and cleanup
     session.close()
+    transaction.rollback()
+    connection.close()
+
+
+@pytest.fixture(scope="session")
+def client() -> Generator[TestClient, Any, None]:
+    """Test client for the FastAPI application."""
+    with TestClient(app) as _client:
+        yield _client
+    app.dependency_overrides = {}
 
 
 def override_dependency(dependency: Callable[..., Any], mocked_response: Any) -> None:
@@ -43,24 +112,50 @@ def override_dependency(dependency: Callable[..., Any], mocked_response: Any) ->
 
 
 @pytest.fixture
+def override_get_db(async_db):
+    """Override the database dependency for tests that need it."""
+    from src.app.api.dependencies import get_db
+
+    async def _override_get_db():
+        yield async_db
+
+    # Store original dependency
+    original = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = _override_get_db
+
+    yield _override_get_db
+
+    # Clean up override after test
+    if original is None:
+        app.dependency_overrides.pop(get_db, None)
+    else:
+        app.dependency_overrides[get_db] = original
+
+
+@pytest.fixture
 def mock_db():
     """Mock database session for unit tests."""
-    mock = Mock(spec=AsyncSession)
-    # Add async context manager support for transactions
-    mock.begin = Mock(
-        return_value=AsyncMock(
-            __aenter__=AsyncMock(return_value=None),
-            __aexit__=AsyncMock(return_value=None)
-        )
-    )
+    mock = AsyncMock(spec=AsyncSession)
+
+    # Create a proper async context manager for transactions
+    class AsyncContextManager:
+        async def __aenter__(self):
+            return None
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+    # Make begin() return an async context manager instance
+    mock.begin.return_value = AsyncContextManager()
     mock.flush = AsyncMock(return_value=None)
+    mock.commit = AsyncMock(return_value=None)
+    mock.rollback = AsyncMock(return_value=None)
     return mock
 
 
 @pytest.fixture
 def mock_redis():
     """Mock Redis connection for unit tests."""
-    mock_redis = Mock()
+    mock_redis = AsyncMock()
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock(return_value=True)
     mock_redis.delete = AsyncMock(return_value=True)
