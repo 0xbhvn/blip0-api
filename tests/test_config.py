@@ -24,7 +24,10 @@ class TestDatabaseSettings(BaseSettings):
     @property
     def TEST_DATABASE_URI(self) -> str:
         """Get the test database URI."""
-        return f"{self.TEST_POSTGRES_USER}:{self.TEST_POSTGRES_PASSWORD}@{self.TEST_POSTGRES_SERVER}:{self.TEST_POSTGRES_PORT}/{self.TEST_POSTGRES_DB}"
+        return (
+            f"{self.TEST_POSTGRES_USER}:{self.TEST_POSTGRES_PASSWORD}@"
+            f"{self.TEST_POSTGRES_SERVER}:{self.TEST_POSTGRES_PORT}/{self.TEST_POSTGRES_DB}"
+        )
 
     @property
     def TEST_DATABASE_SYNC_URL(self) -> str:
