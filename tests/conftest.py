@@ -1,4 +1,4 @@
-from collections.abc import Callable, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
@@ -58,7 +58,7 @@ def setup_test_database():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def async_db(setup_test_database) -> AsyncSession:
+async def async_db(setup_test_database) -> AsyncGenerator[AsyncSession, None]:
     """
     Async database session with transaction rollback for test isolation.
 
