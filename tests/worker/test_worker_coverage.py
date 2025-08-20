@@ -4,6 +4,8 @@ import asyncio
 import sys
 from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
 # Mock database dependencies to avoid connection issues
 mock_db = Mock()
 mock_db.async_engine = Mock()
@@ -43,6 +45,7 @@ def test_worker_settings_coverage():
     assert REDIS_QUEUE_PORT > 0
 
 
+@pytest.mark.asyncio
 async def test_worker_functions_coverage():
     """Test worker functions to achieve better coverage of functions.py."""
     from arq.worker import Worker
