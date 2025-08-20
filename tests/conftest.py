@@ -135,22 +135,27 @@ def override_get_db(async_db):
 @pytest.fixture
 def mock_db():
     """Mock database session for unit tests."""
-    mock = Mock(spec=AsyncSession)
-    # Add async context manager support for transactions
-    mock.begin = Mock(
-        return_value=AsyncMock(
-            __aenter__=AsyncMock(return_value=None),
-            __aexit__=AsyncMock(return_value=None)
-        )
-    )
+    mock = AsyncMock(spec=AsyncSession)
+
+    # Create a proper async context manager for transactions
+    class AsyncContextManager:
+        async def __aenter__(self):
+            return None
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            return None
+
+    # Make begin() return an async context manager instance
+    mock.begin.return_value = AsyncContextManager()
     mock.flush = AsyncMock(return_value=None)
+    mock.commit = AsyncMock(return_value=None)
+    mock.rollback = AsyncMock(return_value=None)
     return mock
 
 
 @pytest.fixture
 def mock_redis():
     """Mock Redis connection for unit tests."""
-    mock_redis = Mock()
+    mock_redis = AsyncMock()
     mock_redis.get = AsyncMock(return_value=None)
     mock_redis.set = AsyncMock(return_value=True)
     mock_redis.delete = AsyncMock(return_value=True)

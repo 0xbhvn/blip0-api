@@ -116,6 +116,9 @@ addopts = [
     "--cov-report=xml",
     "--cov-branch",
 ]
+asyncio_mode = "auto"
+# Ignore Settings classes that pytest mistakes for test classes
+python_classes = ["Test*", "test_*"]
 
 [dependency-groups]
 dev = [

@@ -349,8 +349,8 @@ class TestWorkerIntegration:
             port=99999,  # Port that definitely won't be available
             database=0
         )
-        
-        # Test that connection failures are properly handled 
+
+        # Test that connection failures are properly handled
         with pytest.raises(Exception):  # Could be AuthenticationError, ConnectionError, etc.
             await create_pool(failing_settings)
 
