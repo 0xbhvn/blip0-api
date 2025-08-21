@@ -3,7 +3,7 @@ Tests for admin filter script API endpoints.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -82,8 +82,8 @@ def sample_filter_script_read(sample_filter_script_id):
         last_validated_at=None,
         file_size_bytes=None,
         file_hash=None,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -473,7 +473,6 @@ class TestCreateFilterScript:
         sample_filter_script_create,
         sample_filter_script_read,
         mock_filter_script_service,
-        mock_path_operations,
     ):
         """Test successful filter script creation."""
         # Mock service response
@@ -526,8 +525,6 @@ class TestCreateFilterScript:
     @pytest.mark.asyncio
     async def test_create_filter_script_invalid_language(
         self,
-        mock_db,
-        sample_admin_user,
     ):
         """Test creating a filter script with invalid language."""
         # This should be caught by Pydantic validation
@@ -612,7 +609,6 @@ class TestUpdateFilterScript:
         sample_filter_script_id,
         sample_filter_script_read,
         mock_filter_script_service,
-        mock_path_operations,
     ):
         """Test successful filter script update."""
         # Mock updated data
@@ -627,6 +623,7 @@ class TestUpdateFilterScript:
         )
 
         update_data = FilterScriptUpdate(
+            slug="test-bash-filter",  # Keep the original slug
             name="Updated Test Filter",
             description="Updated description",
             timeout_ms=5000,
