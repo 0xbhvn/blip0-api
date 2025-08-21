@@ -163,7 +163,7 @@ class FilterScriptService(BaseService):
         await self._cache_filter_script(db_script)
 
         if include_content and hasattr(db_script, 'script_path'):
-            content = await self._read_script_file(str(db_script.script_path))
+            content = await self._read_script_file(str(db_script.script_path))  # type: ignore[attr-defined]
             return FilterScriptWithContent(
                 **FilterScriptRead.model_validate(db_script).model_dump(),
                 script_content=content
@@ -250,10 +250,10 @@ class FilterScriptService(BaseService):
 
         # Handle slug update (requires path update)
         new_script_path = None
-        if script_update.slug and hasattr(existing, 'slug') and script_update.slug != existing.slug:
+        if script_update.slug and hasattr(existing, 'slug') and script_update.slug != existing.slug:  # type: ignore[attr-defined]
             language = (
                 script_update.language if script_update.language
-                else (str(existing.language) if hasattr(existing, 'language') else 'bash')
+                else (str(existing.language) if hasattr(existing, 'language') else 'bash')  # type: ignore[attr-defined]
             )
             new_filename = f"{script_update.slug}.{self._get_file_extension(language)}"
             new_script_path = f"./config/filters/{new_filename}"
@@ -284,7 +284,7 @@ class FilterScriptService(BaseService):
         try:
             # Handle script content update if provided
             if script_update.script_content is not None:
-                existing_script_path = str(existing.script_path) if hasattr(existing, 'script_path') else ""
+                existing_script_path = str(existing.script_path) if hasattr(existing, 'script_path') else ""  # type: ignore[attr-defined]
                 full_path = Path(existing_script_path.replace("./", ""))
                 if not full_path.exists():
                     full_path = self.scripts_base_dir / Path(existing_script_path).name
@@ -294,9 +294,9 @@ class FilterScriptService(BaseService):
 
             # Handle slug/file rename if needed
             if new_script_path and hasattr(existing, 'script_path'):
-                old_path = Path(str(existing.script_path).replace("./", ""))
+                old_path = Path(str(existing.script_path).replace("./", ""))  # type: ignore[attr-defined]
                 if not old_path.exists():
-                    old_path = self.scripts_base_dir / Path(str(existing.script_path)).name
+                    old_path = self.scripts_base_dir / Path(str(existing.script_path)).name  # type: ignore[attr-defined]
 
                 new_path = self.scripts_base_dir / Path(new_script_path).name
 
@@ -314,7 +314,7 @@ class FilterScriptService(BaseService):
         # Get updated content
         content = script_update.script_content
         if content is None and hasattr(db_script, 'script_path'):
-            content = await self._read_script_file(str(db_script.script_path))
+            content = await self._read_script_file(str(db_script.script_path))  # type: ignore[attr-defined]
 
         return FilterScriptWithContent(
             **FilterScriptRead.model_validate(db_script).model_dump(),
@@ -349,7 +349,7 @@ class FilterScriptService(BaseService):
 
         # Delete file if requested
         if delete_file and hasattr(existing, 'script_path'):
-            existing_script_path = str(existing.script_path)
+            existing_script_path = str(existing.script_path)  # type: ignore[attr-defined]
             full_path = Path(existing_script_path.replace("./", ""))
             if not full_path.exists():
                 full_path = self.scripts_base_dir / Path(existing_script_path).name
@@ -417,7 +417,7 @@ class FilterScriptService(BaseService):
             )
 
         # Read script content
-        existing_script_path = str(existing.script_path) if hasattr(existing, 'script_path') else ""
+        existing_script_path = str(existing.script_path) if hasattr(existing, 'script_path') else ""  # type: ignore[attr-defined]
         content = await self._read_script_file(existing_script_path)
         if content is None:
             return FilterScriptValidationResult(
@@ -431,7 +431,7 @@ class FilterScriptService(BaseService):
         execution_time_ms = None
 
         # Validate based on language
-        language = str(existing.language) if hasattr(existing, 'language') else 'bash'
+        language = str(existing.language) if hasattr(existing, 'language') else 'bash'  # type: ignore[attr-defined]
         if language == "bash":
             # Check bash syntax using async subprocess
             import asyncio
@@ -456,7 +456,7 @@ class FilterScriptService(BaseService):
         elif language == "python":
             # Check Python syntax
             try:
-                script_path = str(existing.script_path) if hasattr(existing, 'script_path') else 'script.py'
+                script_path = str(existing.script_path) if hasattr(existing, 'script_path') else 'script.py'  # type: ignore[attr-defined]
                 compile(content, script_path, 'exec')
             except SyntaxError as e:
                 errors.append(f"Python syntax error: {str(e)}")
@@ -491,7 +491,7 @@ class FilterScriptService(BaseService):
                     cmd = None
 
                 if cmd:
-                    timeout_ms = int(existing.timeout_ms) if hasattr(existing, 'timeout_ms') else 1000
+                    timeout_ms = int(existing.timeout_ms) if hasattr(existing, 'timeout_ms') else 1000  # type: ignore[attr-defined]
                     import asyncio
                     import os
                     env = {**os.environ, "FILTER_INPUT": test_input_json}
@@ -518,7 +518,7 @@ class FilterScriptService(BaseService):
                     execution_time_ms = int((time.time() - start_time) * 1000)
 
             except subprocess.TimeoutExpired:
-                timeout_ms = int(existing.timeout_ms) if hasattr(existing, 'timeout_ms') else 1000
+                timeout_ms = int(existing.timeout_ms) if hasattr(existing, 'timeout_ms') else 1000  # type: ignore[attr-defined]
                 warnings.append(f"Test execution timed out after {timeout_ms}ms")
             except Exception as e:
                 warnings.append(f"Test execution error: {str(e)}")
