@@ -4,7 +4,7 @@ Tests all CRUD operations, pagination, filtering, and special endpoints.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -110,9 +110,9 @@ def sample_monitor_read(sample_monitor_id, sample_tenant_id):
         match_transactions=[],
         trigger_conditions=[],
         triggers=["trigger-1"],
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-        last_validated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+        last_validated_at=datetime.now(UTC),
     )
 
 
@@ -291,7 +291,7 @@ class TestGetMonitor:
         )
 
         assert result == monitor_with_triggers
-        assert "triggers" in result
+        assert isinstance(result, dict) and "triggers" in result
         mock_monitor_service.get_monitor_with_triggers.assert_called_once()
 
     @pytest.mark.asyncio
@@ -447,10 +447,14 @@ class TestUpdateMonitor:
         mock_monitor_service,
     ):
         """Test successful monitor update."""
-        monitor_update = MonitorUpdate(name="Updated Monitor", description="Updated description")
+        monitor_update = MonitorUpdate(slug="test-monitor", name="Updated Monitor", description="Updated description")
         updated_monitor = sample_monitor_read.model_copy()
         updated_monitor.name = "Updated Monitor"
 
+        # Mock the duplicate slug check - same monitor so not a duplicate
+        mock_monitor_service.list_monitors = AsyncMock(
+            return_value={"total": 1, "items": [sample_monitor_read]}
+        )
         mock_monitor_service.update_monitor = AsyncMock(return_value=updated_monitor)
 
         result = await update_monitor(
@@ -474,7 +478,7 @@ class TestUpdateMonitor:
         mock_monitor_service,
     ):
         """Test monitor update with duplicate slug."""
-        monitor_update = MonitorUpdate(slug="existing-slug")
+        monitor_update = MonitorUpdate(slug="existing-slug", name="Existing Monitor")
 
         # Create a different monitor with the same slug (different ID)
         different_monitor = sample_monitor_read.model_copy()
@@ -506,7 +510,11 @@ class TestUpdateMonitor:
         mock_monitor_service,
     ):
         """Test monitor update when monitor doesn't exist."""
-        monitor_update = MonitorUpdate(name="Updated Monitor")
+        monitor_update = MonitorUpdate(slug="test-monitor", name="Updated Monitor")
+        # Mock the duplicate slug check - no duplicates found
+        mock_monitor_service.list_monitors = AsyncMock(
+            return_value={"total": 0, "items": []}
+        )
         mock_monitor_service.update_monitor = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match=f"Monitor {sample_monitor_id} not found"):
@@ -718,8 +726,8 @@ class TestValidateMonitor:
             match_transactions=[],
             trigger_conditions=[],
             triggers=[],
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             last_validated_at=None,
         )
 
@@ -768,8 +776,8 @@ class TestValidateMonitor:
             match_transactions=[],
             trigger_conditions=[],
             triggers=[],  # No triggers
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             last_validated_at=None,
         )
 
@@ -880,7 +888,7 @@ class TestMonitorEndpointEdgeCases:
             await update_monitor(
                 _request=Mock(),
                 monitor_id=invalid_id,
-                monitor_update=MonitorUpdate(name="Test"),
+                monitor_update=MonitorUpdate(slug="test-monitor", name="Test"),
                 db=mock_db,
                 current_user=current_user_with_tenant,
             )

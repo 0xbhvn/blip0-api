@@ -118,7 +118,7 @@ class TestPatchUser:
         """Test successful user update."""
         username = current_user_dict["username"]
         sample_user_read.username = username  # Make sure usernames match
-        user_update = UserUpdate(name="New Name")
+        user_update = UserUpdate(name="New Name", username=None, email=None, profile_image_url=None)
 
         with patch("src.app.api.v1.users.crud_users") as mock_crud:
             mock_crud.get = AsyncMock(return_value=sample_user_read)
@@ -135,7 +135,7 @@ class TestPatchUser:
         """Test user update when user tries to update another user."""
         username = "different_user"
         sample_user_read.username = username
-        user_update = UserUpdate(name="New Name")
+        user_update = UserUpdate(name="New Name", username=None, email=None, profile_image_url=None)
 
         with patch("src.app.api.v1.users.crud_users") as mock_crud:
             mock_crud.get = AsyncMock(return_value=sample_user_read)
