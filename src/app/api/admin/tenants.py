@@ -35,7 +35,7 @@ from ...services.tenant_service import tenant_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/tenants", tags=["admin-tenants"])
+router = APIRouter(prefix="/tenants", tags=["admin-tenants"])
 
 # Constants for tenant state updates
 SUSPEND_TENANT_UPDATE = TenantUpdate(status="suspended", name=None, slug=None)
