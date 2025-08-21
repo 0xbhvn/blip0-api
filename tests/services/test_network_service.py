@@ -43,8 +43,14 @@ class TestNetworkService:
             slug="ethereum",
             network_type="EVM",
             block_time_ms=12000,
+            description="Ethereum mainnet network",
             chain_id=1,
+            network_passphrase=None,
             rpc_urls=[{"url": "https://eth-mainnet.g.alchemy.com/v2/xxx", "type_": "primary", "weight": 1}],
+            confirmation_blocks=12,
+            cron_schedule="*/10 * * * * *",
+            max_past_blocks=100,
+            store_blocks=False,
             tenant_id=uuid.uuid4()
         )
 
@@ -68,8 +74,14 @@ class TestNetworkService:
             slug="ethereum",
             network_type="EVM",
             block_time_ms=12000,
+            description="Ethereum mainnet network",
             chain_id=1,
+            network_passphrase=None,
             rpc_urls=[{"url": "https://eth-mainnet.g.alchemy.com/v2/xxx", "type_": "primary", "weight": 1}],
+            confirmation_blocks=12,
+            cron_schedule="*/10 * * * * *",
+            max_past_blocks=100,
+            store_blocks=False,
             active=True,
             validated=True,
             validation_errors=None,
@@ -88,8 +100,14 @@ class TestNetworkService:
             slug=sample_network_db.slug,
             network_type=sample_network_db.network_type,
             block_time_ms=sample_network_db.block_time_ms,
+            description=sample_network_db.description,
             chain_id=sample_network_db.chain_id,
+            network_passphrase=sample_network_db.network_passphrase,
             rpc_urls=sample_network_db.rpc_urls,
+            confirmation_blocks=sample_network_db.confirmation_blocks,
+            cron_schedule=sample_network_db.cron_schedule,
+            max_past_blocks=sample_network_db.max_past_blocks,
+            store_blocks=sample_network_db.store_blocks,
             active=sample_network_db.active,
             validated=sample_network_db.validated,
             validation_errors=sample_network_db.validation_errors,
@@ -103,6 +121,11 @@ class TestNetworkService:
         """Sample network update data."""
         return NetworkUpdate(
             name="Ethereum Mainnet Updated",
+            slug="ethereum-updated",
+            block_time_ms=13000,
+            network_passphrase=None,
+            confirmation_blocks=15,
+            max_past_blocks=200,
             rpc_urls=[{"url": "https://eth-mainnet.g.alchemy.com/v2/yyy", "type_": "primary", "weight": 1}]
         )
 
@@ -361,8 +384,8 @@ class TestNetworkService:
         # Get the old values and update with new ones
         old_data = vars(sample_network_db).copy()
         old_data.update(sample_network_update.model_dump(exclude_unset=True))
+        old_data['slug'] = old_slug  # Slug typically doesn't change
         updated_network = MockDBObject(**old_data)
-        updated_network.slug = old_slug  # Slug typically doesn't change
         network_service.crud_network.update.return_value = updated_network
 
         with patch.object(network_service, "_invalidate_network_cache") as mock_invalidate, \
@@ -1023,7 +1046,14 @@ class TestNetworkServiceEdgeCases:
     async def test_update_network_without_slug_attribute(self, network_service, mock_db):
         """Test update_network when existing network has no slug attribute."""
         network_id = str(uuid.uuid4())
-        update_data = NetworkUpdate(name="Updated Network")
+        update_data = NetworkUpdate(
+            name="Updated Network",
+            slug="updated-network",
+            block_time_ms=15000,
+            network_passphrase=None,
+            confirmation_blocks=12,
+            max_past_blocks=100
+        )
 
         # Mock existing network without slug attribute using spec to restrict attributes
         existing_network = Mock(spec=['id', 'name'])  # No slug in spec

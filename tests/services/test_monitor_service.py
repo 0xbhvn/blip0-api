@@ -125,6 +125,7 @@ class TestMonitorService:
         """Sample monitor update data."""
         return MonitorUpdate(
             name="Updated Monitor",
+            slug="updated-monitor",
             description="Updated description",
             paused=True
         )

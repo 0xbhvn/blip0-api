@@ -89,8 +89,9 @@ class TestTenantService:
         """Sample tenant update data."""
         return TenantUpdate(
             name="Updated Company",
-            description="Updated description",
-            is_active=False
+            slug="updated-company",
+            plan="pro",
+            status="active"
         )
 
     @pytest.mark.asyncio
@@ -837,7 +838,7 @@ class TestTenantServiceEdgeCases:
     async def test_update_tenant_with_string_id(self, tenant_service, mock_db):
         """Test update_tenant with string UUID."""
         tenant_id = "550e8400-e29b-41d4-a716-446655440000"
-        update_data = TenantUpdate(name="Updated Tenant")
+        update_data = TenantUpdate(name="Updated Tenant", slug="updated-tenant")
 
         from datetime import datetime
 
