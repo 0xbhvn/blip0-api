@@ -999,7 +999,7 @@ class TestTriggerService:
 
         # Mock triggers result
         from typing import NamedTuple
-        
+
         class MockTrigger(NamedTuple):
             id: uuid.UUID
             name: str
@@ -1082,7 +1082,7 @@ class TestTriggerService:
 
         # Mock triggers result
         from typing import NamedTuple
-        
+
         class MockTrigger(NamedTuple):
             id: uuid.UUID
             name: str
