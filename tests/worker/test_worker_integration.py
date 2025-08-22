@@ -28,7 +28,7 @@ class MockRedis:
     async def get(self, key):
         return self.data.get(key)
 
-    async def set(self, key, value, ex=None):
+    async def set(self, key, value):
         self.data[key] = value
         return True
 
@@ -43,7 +43,7 @@ class MockRedis:
         self.queues[queue_name].extend(reversed(values))
         return len(self.queues[queue_name])
 
-    async def brpop(self, keys, timeout=None):
+    async def brpop(self, keys):
         for key in keys:
             if key in self.queues and self.queues[key]:
                 return (key, self.queues[key].pop())
@@ -76,10 +76,10 @@ class MockJob:
         self.args = args or ()
         self.kwargs = kwargs or {}
         self.status = status
-        self.result = None
+        self.result: str | None = None
         self.enqueue_time = asyncio.get_event_loop().time()
-        self.start_time = None
-        self.finish_time = None
+        self.start_time: float | None = None
+        self.finish_time: float | None = None
 
     async def result_info(self):
         return {
@@ -142,8 +142,8 @@ class TestWorkerIntegration:
             # Verify settings can be used to initialize a worker-like object
             assert settings.functions is not None
             assert settings.redis_settings is not None
-            assert callable(settings.on_startup)
-            assert callable(settings.on_shutdown)
+            assert callable(getattr(settings, 'on_startup'))
+            assert callable(getattr(settings, 'on_shutdown'))
 
     @pytest.mark.asyncio
     async def test_task_queuing_and_execution(self):
@@ -450,7 +450,7 @@ class TestWorkerErrorHandling:
         mock_redis = MockArqRedis()
 
         # Create a task that raises an exception
-        async def failing_task(ctx, message):
+        async def failing_task(_ctx, message):
             raise ValueError(f"Task failed with message: {message}")
 
         with patch('arq.create_pool', return_value=mock_redis):
@@ -470,7 +470,7 @@ class TestWorkerErrorHandling:
                 job.result = str(e)
 
             assert job.status == JobStatus.deferred
-            assert "Task failed with message: error_message" in job.result
+            assert job.result and "Task failed with message: error_message" in job.result
 
     @pytest.mark.asyncio
     async def test_redis_operation_failures(self):

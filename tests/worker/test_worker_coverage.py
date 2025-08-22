@@ -36,8 +36,9 @@ def test_worker_settings_coverage():
     assert isinstance(WorkerSettings.functions, list)
     assert len(WorkerSettings.functions) >= 1
     assert WorkerSettings.handle_signals is False
-    assert callable(WorkerSettings.on_startup)
-    assert callable(WorkerSettings.on_shutdown)
+    # Verify the callbacks are the expected functions
+    assert getattr(WorkerSettings, 'on_startup') == startup
+    assert getattr(WorkerSettings, 'on_shutdown') == shutdown
 
     # Test Redis constants
     assert isinstance(REDIS_QUEUE_HOST, str)

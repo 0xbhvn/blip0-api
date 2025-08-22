@@ -106,8 +106,6 @@ class TestSampleBackgroundTask:
         task_name = "cancelled_task"
 
         # Create a task that will be cancelled
-        async def cancelled_sleep(duration):
-            await asyncio.sleep(duration)
 
         with patch('asyncio.sleep', side_effect=asyncio.CancelledError()):
             # Act & Assert
@@ -341,7 +339,7 @@ class TestWorkerFunctionErrorHandling:
         # Mock asyncio.sleep to avoid actual delay
         with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
             # Act
-            result = await sample_background_task(None, task_name)
+            result = await sample_background_task(None, task_name)  # type: ignore
 
             # Assert
             mock_sleep.assert_called_once_with(5)
@@ -355,7 +353,7 @@ class TestWorkerFunctionErrorHandling:
 
         # Act
         with caplog.at_level(logging.INFO):
-            result = await startup(None)
+            result = await startup(None)  # type: ignore
 
         # Assert
         assert result is None
@@ -369,7 +367,7 @@ class TestWorkerFunctionErrorHandling:
 
         # Act
         with caplog.at_level(logging.INFO):
-            result = await shutdown(None)
+            result = await shutdown(None)  # type: ignore
 
         # Assert
         assert result is None
@@ -384,7 +382,7 @@ class TestWorkerFunctionErrorHandling:
         # Mock asyncio.sleep to avoid actual delay
         with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
             # Act
-            result = await sample_background_task(mock_ctx, None)
+            result = await sample_background_task(mock_ctx, None)  # type: ignore
 
             # Assert
             mock_sleep.assert_called_once_with(5)
@@ -399,7 +397,7 @@ class TestWorkerFunctionErrorHandling:
 
         # Create context variable to test preservation
         import contextvars
-        test_var = contextvars.ContextVar('test_var', default=None)
+        test_var: contextvars.ContextVar[str] = contextvars.ContextVar('test_var', default='initial')
         test_var.set('test_value')
 
         # Mock asyncio.sleep to avoid actual delay
