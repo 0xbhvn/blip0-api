@@ -19,6 +19,7 @@ from ...core.exceptions.http_exceptions import (
     NotFoundException,
 )
 from ...core.logger import logging
+from ...crud.crud_tenant import crud_tenant
 from ...schemas.tenant import (
     TenantActivateRequest,
     TenantAdminPagination,
@@ -31,7 +32,6 @@ from ...schemas.tenant import (
     TenantUpdate,
     TenantWithLimits,
 )
-from ...services.tenant_service import tenant_service
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ async def list_tenants(
     sort = TenantSort(field=sort_field, order=sort_order)
 
     # Get paginated tenants with admin details
-    result = await tenant_service.list_all_tenants(
+    result = await crud_tenant.list_all_tenants(
         db=db,
         page=page,
         size=size,
@@ -111,8 +111,6 @@ async def create_tenant(
 
     try:
         # Create tenant with limits
-        from ...crud.crud_tenant import crud_tenant
-
         created_tenant = await crud_tenant.create_with_limits(
             db=db,
             obj_in=tenant_in,
@@ -165,7 +163,7 @@ async def get_tenant(
     from ...models.trigger import Trigger
     from ...models.user import User
 
-    tenant = await tenant_service.get_tenant(db, tenant_uuid)
+    tenant = await crud_tenant.get_with_cache(db, tenant_uuid)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -193,7 +191,7 @@ async def get_tenant(
     trigger_count = trigger_count_result.scalar() or 0
 
     # Get limits
-    limits = await tenant_service.get_tenant_limits(db, tenant_uuid)
+    limits = await crud_tenant.get_tenant_limits(db, tenant_uuid)
 
     # Create admin read response
     admin_tenant = TenantAdminRead(
@@ -235,10 +233,10 @@ async def update_tenant(
 
     # Update tenant
     try:
-        updated_tenant = await tenant_service.update_tenant(
+        updated_tenant = await crud_tenant.update_with_cache(
             db=db,
             tenant_id=tenant_uuid,
-            tenant_update=tenant_update,
+            obj_in=tenant_update,
         )
 
         if not updated_tenant:
@@ -287,7 +285,7 @@ async def delete_tenant(
         raise BadRequestException(f"Invalid tenant ID format: {tenant_id}")
 
     # Check if tenant exists
-    tenant = await tenant_service.get_tenant(db, tenant_uuid)
+    tenant = await crud_tenant.get_with_cache(db, tenant_uuid)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -296,7 +294,7 @@ async def delete_tenant(
         raise ForbiddenException("Cannot delete your own tenant")
 
     # Delete tenant
-    deleted = await tenant_service.delete_tenant(
+    deleted = await crud_tenant.delete_with_cache(
         db=db,
         tenant_id=tenant_uuid,
         is_hard_delete=is_hard_delete,
@@ -334,7 +332,7 @@ async def suspend_tenant(
         raise BadRequestException(f"Invalid tenant ID format: {tenant_id}")
 
     # Check if tenant exists and is not already suspended
-    tenant = await tenant_service.get_tenant(db, tenant_uuid)
+    tenant = await crud_tenant.get_with_cache(db, tenant_uuid)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -346,7 +344,7 @@ async def suspend_tenant(
         raise ForbiddenException("Cannot suspend your own tenant")
 
     # Suspend tenant
-    suspended_tenant = await tenant_service.suspend_tenant(
+    suspended_tenant = await crud_tenant.suspend_tenant_with_request(
         db=db,
         tenant_id=tenant_uuid,
         request=suspend_request,
@@ -385,7 +383,7 @@ async def activate_tenant(
         raise BadRequestException(f"Invalid tenant ID format: {tenant_id}")
 
     # Check if tenant exists and is suspended
-    tenant = await tenant_service.get_tenant(db, tenant_uuid)
+    tenant = await crud_tenant.get_with_cache(db, tenant_uuid)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -393,7 +391,7 @@ async def activate_tenant(
         raise BadRequestException(f"Tenant {tenant_id} is already active")
 
     # Activate tenant
-    activated_tenant = await tenant_service.activate_tenant(
+    activated_tenant = await crud_tenant.activate_tenant_with_request(
         db=db,
         tenant_id=tenant_uuid,
         request=activate_request,

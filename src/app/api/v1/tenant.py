@@ -20,6 +20,7 @@ from ...core.exceptions.http_exceptions import (
     NotFoundException,
 )
 from ...core.logger import logging
+from ...crud.crud_tenant import crud_tenant
 from ...schemas.tenant import (
     TenantLimitsRead,
     TenantRead,
@@ -27,7 +28,6 @@ from ...schemas.tenant import (
     TenantUsageStats,
     TenantWithLimits,
 )
-from ...services.tenant_service import tenant_service
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,6 @@ async def get_current_tenant(
     logger.info(f"User {current_user['id']} getting tenant info for {tenant_id}")
 
     # Get tenant with limits
-    from ...crud.crud_tenant import crud_tenant
-
     tenant_uuid = uuid_pkg.UUID(tenant_id)
     tenant_with_limits = await crud_tenant.get_with_limits(db, tenant_uuid)
 
@@ -82,7 +80,7 @@ async def update_current_tenant(
     logger.info(f"User {current_user['id']} updating tenant {tenant_id}")
 
     # Check tenant status
-    tenant = await tenant_service.get_tenant(db, tenant_id)
+    tenant = await crud_tenant.get_with_cache(db, tenant_id)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -91,7 +89,7 @@ async def update_current_tenant(
 
     # Update tenant with limited fields
     try:
-        updated_tenant = await tenant_service.update_tenant_self_service(
+        updated_tenant = await crud_tenant.update_tenant_self_service(
             db=db,
             tenant_id=tenant_id,
             update_data=update_data,
@@ -138,7 +136,7 @@ async def get_tenant_usage(
     logger.info(f"User {current_user['id']} getting usage stats for tenant {tenant_id}")
 
     # Check tenant status
-    tenant = await tenant_service.get_tenant(db, tenant_id)
+    tenant = await crud_tenant.get_with_cache(db, tenant_id)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -146,7 +144,7 @@ async def get_tenant_usage(
         raise ForbiddenException("Tenant is suspended. Please contact support.")
 
     # Get usage statistics
-    usage_stats = await tenant_service.get_tenant_usage(db, tenant_id)
+    usage_stats = await crud_tenant.get_tenant_usage(db, tenant_id)
 
     if not usage_stats:
         raise NotFoundException("Usage statistics not available")
@@ -174,7 +172,7 @@ async def get_tenant_limits(
     logger.info(f"User {current_user['id']} getting limits for tenant {tenant_id}")
 
     # Check tenant status
-    tenant = await tenant_service.get_tenant(db, tenant_id)
+    tenant = await crud_tenant.get_with_cache(db, tenant_id)
     if not tenant:
         raise NotFoundException(f"Tenant {tenant_id} not found")
 
@@ -182,7 +180,7 @@ async def get_tenant_limits(
         raise ForbiddenException("Tenant is suspended. Please contact support.")
 
     # Get tenant limits
-    limits = await tenant_service.get_tenant_limits(db, tenant_id)
+    limits = await crud_tenant.get_tenant_limits(db, tenant_id)
 
     if not limits:
         raise NotFoundException("Tenant limits not configured")

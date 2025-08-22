@@ -163,17 +163,12 @@ def sample_tenant_admin_read(sample_tenant_id):
 
 
 @pytest.fixture
-def mock_tenant_service():
-    """Mock tenant service."""
-    with patch("src.app.api.admin.tenants.tenant_service") as mock_service:
-        yield mock_service
-
-
-@pytest.fixture
 def mock_crud_tenant():
     """Mock crud_tenant."""
-    with patch("src.app.crud.crud_tenant.crud_tenant") as mock_crud:
+    with patch("src.app.api.admin.tenants.crud_tenant") as mock_crud:
         yield mock_crud
+
+
 
 
 class TestListTenants:
@@ -185,11 +180,11 @@ class TestListTenants:
         mock_db,
         sample_admin_user,
         sample_tenant_admin_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful tenant listing with default pagination."""
         # Mock service response
-        mock_tenant_service.list_all_tenants = AsyncMock(
+        mock_crud_tenant.list_all_tenants = AsyncMock(
             return_value=TenantAdminPagination(
                 items=[sample_tenant_admin_read],
                 total=1,
@@ -216,17 +211,17 @@ class TestListTenants:
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
-        mock_tenant_service.list_all_tenants.assert_called_once()
+        mock_crud_tenant.list_all_tenants.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_tenants_with_filters(
         self,
         mock_db,
         sample_admin_user,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test tenant listing with all filters applied."""
-        mock_tenant_service.list_all_tenants = AsyncMock(
+        mock_crud_tenant.list_all_tenants = AsyncMock(
             return_value=TenantAdminPagination(
                 items=[], total=0, page=1, size=50, pages=0
             )
@@ -251,7 +246,7 @@ class TestListTenants:
         assert len(result["items"]) == 0
 
         # Verify filter was constructed correctly
-        call_args = mock_tenant_service.list_all_tenants.call_args
+        call_args = mock_crud_tenant.list_all_tenants.call_args
         filters = call_args.kwargs["filters"]
         assert filters.name == "test"
         assert filters.slug == "test-slug"
@@ -264,10 +259,10 @@ class TestListTenants:
         mock_db,
         sample_admin_user,
         sample_tenant_admin_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test tenant listing with custom pagination."""
-        mock_tenant_service.list_all_tenants = AsyncMock(
+        mock_crud_tenant.list_all_tenants = AsyncMock(
             return_value=TenantAdminPagination(
                 items=[sample_tenant_admin_read] * 10,
                 total=100,
@@ -302,10 +297,10 @@ class TestListTenants:
         self,
         mock_db,
         sample_admin_user,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test tenant listing with empty result."""
-        mock_tenant_service.list_all_tenants = AsyncMock(
+        mock_crud_tenant.list_all_tenants = AsyncMock(
             return_value=TenantAdminPagination(
                 items=[], total=0, page=1, size=50, pages=0
             )
@@ -458,11 +453,11 @@ class TestGetTenant:
         sample_tenant_id,
         sample_tenant_read,
         sample_tenant_admin_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful single tenant retrieval with admin details."""
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_limits = AsyncMock(
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_limits = AsyncMock(
             return_value=sample_tenant_admin_read.limits
         )
 
@@ -483,7 +478,7 @@ class TestGetTenant:
         assert result.user_count == 10
         assert result.monitor_count == 10
         assert result.trigger_count == 10
-        mock_tenant_service.get_tenant.assert_called_once()
+        mock_crud_tenant.get_with_cache.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_tenant_invalid_id(
@@ -507,10 +502,10 @@ class TestGetTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_id,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant when tenant doesn't exist."""
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await get_tenant(
@@ -532,7 +527,7 @@ class TestUpdateTenant:
         sample_admin_user,
         sample_tenant_id,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful tenant update."""
         tenant_update = TenantUpdate(
@@ -543,7 +538,7 @@ class TestUpdateTenant:
         updated_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "name": "Updated Company"}
         )
-        mock_tenant_service.update_tenant = AsyncMock(return_value=updated_tenant)
+        mock_crud_tenant.update_with_cache = AsyncMock(return_value=updated_tenant)
 
         result = await update_tenant(
             _request=Mock(),
@@ -555,7 +550,7 @@ class TestUpdateTenant:
         )
 
         assert result.name == "Updated Company"
-        mock_tenant_service.update_tenant.assert_called_once()
+        mock_crud_tenant.update_with_cache.assert_called_once()
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -583,11 +578,11 @@ class TestUpdateTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_id,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update tenant when tenant doesn't exist."""
         tenant_update = TenantUpdate(slug="test-company", name="Updated")
-        mock_tenant_service.update_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.update_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await update_tenant(
@@ -605,13 +600,13 @@ class TestUpdateTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_id,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update tenant with duplicate name."""
         from sqlalchemy.exc import IntegrityError
 
         tenant_update = TenantUpdate(slug="test-company", name="Existing Company")
-        mock_tenant_service.update_tenant = AsyncMock(
+        mock_crud_tenant.update_with_cache = AsyncMock(
             side_effect=IntegrityError("duplicate key", None, Exception("duplicate key error"))
         )
 
@@ -638,13 +633,13 @@ class TestDeleteTenant:
         sample_admin_user,
         sample_tenant_id,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful soft delete of tenant."""
         # Use a different tenant ID for the target
         target_tenant_id = uuid.uuid4()
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.delete_tenant = AsyncMock(return_value=True)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.delete_with_cache = AsyncMock(return_value=True)
 
         await delete_tenant(
             _request=Mock(),
@@ -655,7 +650,7 @@ class TestDeleteTenant:
             is_hard_delete=False,
         )
 
-        mock_tenant_service.delete_tenant.assert_called_once_with(
+        mock_crud_tenant.delete_with_cache.assert_called_once_with(
             db=mock_db, tenant_id=target_tenant_id, is_hard_delete=False
         )
         mock_db.commit.assert_called_once()
@@ -667,12 +662,12 @@ class TestDeleteTenant:
         sample_admin_user,
         sample_tenant_id,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test hard delete of tenant."""
         target_tenant_id = uuid.uuid4()
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.delete_tenant = AsyncMock(return_value=True)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.delete_with_cache = AsyncMock(return_value=True)
 
         await delete_tenant(
             _request=Mock(),
@@ -683,7 +678,7 @@ class TestDeleteTenant:
             is_hard_delete=True,
         )
 
-        mock_tenant_service.delete_tenant.assert_called_once_with(
+        mock_crud_tenant.delete_with_cache.assert_called_once_with(
             db=mock_db, tenant_id=target_tenant_id, is_hard_delete=True
         )
 
@@ -694,10 +689,10 @@ class TestDeleteTenant:
         sample_admin_user,
         sample_tenant_id,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test admin cannot delete their own tenant."""
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
 
         with pytest.raises(ForbiddenException, match="Cannot delete your own tenant"):
             await delete_tenant(
@@ -715,10 +710,10 @@ class TestDeleteTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_id,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test delete tenant when tenant doesn't exist."""
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await delete_tenant(
@@ -736,12 +731,12 @@ class TestDeleteTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test delete tenant when deletion fails."""
         target_tenant_id = uuid.uuid4()
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.delete_tenant = AsyncMock(return_value=False)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.delete_with_cache = AsyncMock(return_value=False)
 
         with pytest.raises(BadRequestException, match="Failed to delete tenant"):
             await delete_tenant(
@@ -764,7 +759,7 @@ class TestSuspendTenant:
         sample_admin_user,
         sample_tenant_id,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful tenant suspension."""
         target_tenant_id = uuid.uuid4()
@@ -772,11 +767,11 @@ class TestSuspendTenant:
             reason="Policy violation", notify_users=True
         )
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
         suspended_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "status": "suspended"}
         )
-        mock_tenant_service.suspend_tenant = AsyncMock(return_value=suspended_tenant)
+        mock_crud_tenant.suspend_tenant_with_request = AsyncMock(return_value=suspended_tenant)
 
         result = await suspend_tenant(
             _request=Mock(),
@@ -788,7 +783,7 @@ class TestSuspendTenant:
         )
 
         assert result.status == "suspended"
-        mock_tenant_service.suspend_tenant.assert_called_once()
+        mock_crud_tenant.suspend_tenant_with_request.assert_called_once()
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -797,14 +792,14 @@ class TestSuspendTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test suspending an already suspended tenant."""
         suspend_request = TenantSuspendRequest(reason="Test")
         suspended_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "status": "suspended"}
         )
-        mock_tenant_service.get_tenant = AsyncMock(return_value=suspended_tenant)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=suspended_tenant)
 
         with pytest.raises(BadRequestException, match="already suspended"):
             await suspend_tenant(
@@ -823,11 +818,11 @@ class TestSuspendTenant:
         sample_admin_user,
         sample_tenant_id,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test admin cannot suspend their own tenant."""
         suspend_request = TenantSuspendRequest(reason="Test")
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
 
         with pytest.raises(ForbiddenException, match="Cannot suspend your own tenant"):
             await suspend_tenant(
@@ -844,11 +839,11 @@ class TestSuspendTenant:
         self,
         mock_db,
         sample_admin_user,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test suspend tenant when tenant doesn't exist."""
         suspend_request = TenantSuspendRequest(reason="Test")
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await suspend_tenant(
@@ -870,7 +865,7 @@ class TestActivateTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful tenant activation."""
         activate_request = TenantActivateRequest(
@@ -880,12 +875,12 @@ class TestActivateTenant:
         suspended_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "status": "suspended"}
         )
-        mock_tenant_service.get_tenant = AsyncMock(return_value=suspended_tenant)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=suspended_tenant)
 
         activated_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "status": "active"}
         )
-        mock_tenant_service.activate_tenant = AsyncMock(return_value=activated_tenant)
+        mock_crud_tenant.activate_tenant_with_request = AsyncMock(return_value=activated_tenant)
 
         result = await activate_tenant(
             _request=Mock(),
@@ -897,7 +892,7 @@ class TestActivateTenant:
         )
 
         assert result.status == "active"
-        mock_tenant_service.activate_tenant.assert_called_once()
+        mock_crud_tenant.activate_tenant_with_request.assert_called_once()
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -906,11 +901,11 @@ class TestActivateTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test activating an already active tenant."""
         activate_request = TenantActivateRequest(reason="Test")
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
 
         with pytest.raises(BadRequestException, match="already active"):
             await activate_tenant(
@@ -927,11 +922,11 @@ class TestActivateTenant:
         self,
         mock_db,
         sample_admin_user,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test activate tenant when tenant doesn't exist."""
         activate_request = TenantActivateRequest(reason="Test")
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await activate_tenant(
@@ -949,15 +944,15 @@ class TestActivateTenant:
         mock_db,
         sample_admin_user,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test activate tenant when activation fails."""
         activate_request = TenantActivateRequest(reason="Test")
         suspended_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "status": "suspended"}
         )
-        mock_tenant_service.get_tenant = AsyncMock(return_value=suspended_tenant)
-        mock_tenant_service.activate_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=suspended_tenant)
+        mock_crud_tenant.activate_tenant_with_request = AsyncMock(return_value=None)
 
         with pytest.raises(BadRequestException, match="Failed to activate tenant"):
             await activate_tenant(
