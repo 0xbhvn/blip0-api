@@ -178,10 +178,10 @@ def sample_webhook_trigger_read(sample_trigger_id, sample_tenant_id):
 
 
 @pytest.fixture
-def mock_trigger_service():
-    """Mock trigger service."""
-    with patch("src.app.api.v1.triggers.trigger_service") as mock_service:
-        yield mock_service
+def mock_crud_trigger():
+    """Mock trigger CRUD."""
+    with patch("src.app.api.v1.triggers.crud_trigger") as mock_crud:
+        yield mock_crud
 
 
 class TestListTriggers:
@@ -194,11 +194,11 @@ class TestListTriggers:
         current_user_with_tenant,
         sample_email_trigger_read,
         sample_webhook_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful trigger listing with pagination."""
-        # Mock service response
-        mock_trigger_service.get_multi = AsyncMock(
+        # Mock CRUD response
+        mock_crud_trigger.get_paginated = AsyncMock(
             return_value={
                 "items": [sample_email_trigger_read, sample_webhook_trigger_read],
                 "total": 2,
@@ -227,7 +227,7 @@ class TestListTriggers:
         assert len(result["items"]) == 2
         assert result["items"][0] == sample_email_trigger_read
         assert result["items"][1] == sample_webhook_trigger_read
-        mock_trigger_service.get_multi.assert_called_once()
+        mock_crud_trigger.get_paginated.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_triggers_with_type_filter(
@@ -235,10 +235,10 @@ class TestListTriggers:
         mock_db,
         current_user_with_tenant,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test trigger listing filtered by type."""
-        mock_trigger_service.get_multi = AsyncMock(
+        mock_crud_trigger.get_paginated = AsyncMock(
             return_value={
                 "items": [sample_email_trigger_read],
                 "total": 1,
@@ -267,7 +267,7 @@ class TestListTriggers:
         assert result["items"][0].trigger_type == "email"
 
         # Verify filter was constructed correctly
-        call_args = mock_trigger_service.get_multi.call_args
+        call_args = mock_crud_trigger.get_paginated.call_args
         filters = call_args.kwargs["filters"]
         assert filters.trigger_type == "email"
 
@@ -305,10 +305,15 @@ class TestGetTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful single trigger retrieval."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
+        # Mock returns DB model, we convert to schema
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
 
         result = await get_trigger(
             _request=Mock(),
@@ -318,9 +323,9 @@ class TestGetTrigger:
         )
 
         assert result == sample_email_trigger_read
-        mock_trigger_service.get_trigger_by_id.assert_called_once_with(
+        mock_crud_trigger.get.assert_called_once_with(
             db=mock_db,
-            trigger_id=sample_trigger_id,
+            id=sample_trigger_id,
             tenant_id=str(current_user_with_tenant["tenant_id"]),
         )
 
@@ -345,10 +350,10 @@ class TestGetTrigger:
         mock_db,
         current_user_with_tenant,
         sample_trigger_id,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test trigger retrieval when trigger doesn't exist."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=None)
+        mock_crud_trigger.get = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match=f"Trigger {sample_trigger_id} not found"):
             await get_trigger(
@@ -369,11 +374,12 @@ class TestCreateEmailTrigger:
         current_user_with_tenant,
         sample_email_config,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful email trigger creation."""
-        mock_trigger_service.get_trigger_by_slug = AsyncMock(return_value=None)
-        mock_trigger_service.create_trigger = AsyncMock(return_value=sample_email_trigger_read)
+        mock_crud_trigger.get_by_slug = AsyncMock(return_value=None)
+        # Mock returns schema directly since create_with_config returns TriggerRead
+        mock_crud_trigger.create_with_config = AsyncMock(return_value=sample_email_trigger_read)
 
         result = await create_email_trigger(
             _request=Mock(),
@@ -386,7 +392,7 @@ class TestCreateEmailTrigger:
         )
 
         assert result == sample_email_trigger_read
-        mock_trigger_service.create_trigger.assert_called_once()
+        mock_crud_trigger.create_with_config.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_email_trigger_duplicate_slug(
@@ -395,10 +401,15 @@ class TestCreateEmailTrigger:
         current_user_with_tenant,
         sample_email_config,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test email trigger creation with duplicate slug."""
-        mock_trigger_service.get_trigger_by_slug = AsyncMock(return_value=sample_email_trigger_read)
+        # Mock returns DB model for existing trigger
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get_by_slug = AsyncMock(return_value=db_trigger)
 
         with pytest.raises(
             DuplicateValueException,
@@ -419,7 +430,7 @@ class TestCreateEmailTrigger:
         self,
         mock_db,
         current_user_with_tenant,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test email trigger creation with invalid email addresses."""
         invalid_email_config = EmailTriggerBase(
@@ -435,8 +446,8 @@ class TestCreateEmailTrigger:
             message_body="Test",
         )
 
-        mock_trigger_service.get_trigger_by_slug = AsyncMock(return_value=None)
-        mock_trigger_service.create_trigger = AsyncMock(
+        mock_crud_trigger.get_by_slug = AsyncMock(return_value=None)
+        mock_crud_trigger.create_with_config = AsyncMock(
             side_effect=ValueError("Invalid email address")
         )
 
@@ -464,11 +475,12 @@ class TestCreateWebhookTrigger:
         current_user_with_tenant,
         sample_webhook_config,
         sample_webhook_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful webhook trigger creation."""
-        mock_trigger_service.get_trigger_by_slug = AsyncMock(return_value=None)
-        mock_trigger_service.create_trigger = AsyncMock(return_value=sample_webhook_trigger_read)
+        mock_crud_trigger.get_by_slug = AsyncMock(return_value=None)
+        # Mock returns schema directly since create_with_config returns TriggerRead
+        mock_crud_trigger.create_with_config = AsyncMock(return_value=sample_webhook_trigger_read)
 
         result = await create_webhook_trigger(
             _request=Mock(),
@@ -481,14 +493,14 @@ class TestCreateWebhookTrigger:
         )
 
         assert result == sample_webhook_trigger_read
-        mock_trigger_service.create_trigger.assert_called_once()
+        mock_crud_trigger.create_with_config.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_webhook_trigger_invalid_method(
         self,
         mock_db,
         current_user_with_tenant,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test webhook trigger creation with invalid HTTP method."""
         # This should raise validation error from pydantic
@@ -518,15 +530,21 @@ class TestUpdateEmailTrigger:
         sample_trigger_id,
         sample_email_trigger_read,
         sample_email_config,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful email trigger update."""
         updated_trigger = sample_email_trigger_read.model_copy()
         updated_trigger.name = "Updated Email Trigger"
 
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
-        mock_trigger_service.get_trigger_by_slug = AsyncMock(return_value=None)
-        mock_trigger_service.update_trigger = AsyncMock(return_value=updated_trigger)
+        # Mock returns DB model for get, schema for update
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.get_by_slug = AsyncMock(return_value=None)
+        mock_crud_trigger.update_with_config = AsyncMock(return_value=updated_trigger)
 
         result = await update_email_trigger(
             _request=Mock(),
@@ -541,7 +559,7 @@ class TestUpdateEmailTrigger:
         )
 
         assert result.name == "Updated Email Trigger"
-        mock_trigger_service.update_trigger.assert_called_once()
+        mock_crud_trigger.update_with_config.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_update_email_trigger_wrong_type(
@@ -550,10 +568,15 @@ class TestUpdateEmailTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_webhook_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test updating a non-email trigger through email endpoint."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_webhook_trigger_read)
+        # Mock returns webhook trigger DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_webhook_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
 
         with pytest.raises(
             BadRequestException,
@@ -583,15 +606,21 @@ class TestUpdateWebhookTrigger:
         sample_trigger_id,
         sample_webhook_trigger_read,
         sample_webhook_config,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful webhook trigger update."""
         updated_trigger = sample_webhook_trigger_read.model_copy()
         updated_trigger.name = "Updated Webhook Trigger"
 
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_webhook_trigger_read)
-        mock_trigger_service.get_trigger_by_slug = AsyncMock(return_value=None)
-        mock_trigger_service.update_trigger = AsyncMock(return_value=updated_trigger)
+        # Mock returns DB model for get, schema for update
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_webhook_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.get_by_slug = AsyncMock(return_value=None)
+        mock_crud_trigger.update_with_config = AsyncMock(return_value=updated_trigger)
 
         result = await update_webhook_trigger(
             _request=Mock(),
@@ -606,7 +635,7 @@ class TestUpdateWebhookTrigger:
         )
 
         assert result.name == "Updated Webhook Trigger"
-        mock_trigger_service.update_trigger.assert_called_once()
+        mock_crud_trigger.update_with_config.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_update_webhook_trigger_wrong_type(
@@ -615,10 +644,15 @@ class TestUpdateWebhookTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test updating a non-webhook trigger through webhook endpoint."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
+        # Mock returns email trigger DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
 
         with pytest.raises(
             BadRequestException,
@@ -646,10 +680,10 @@ class TestDeleteTrigger:
         mock_db,
         current_user_with_tenant,
         sample_trigger_id,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test soft delete of trigger."""
-        mock_trigger_service.delete_trigger = AsyncMock(return_value=True)
+        mock_crud_trigger.delete_with_tenant = AsyncMock(return_value=True)
 
         await delete_trigger(
             _request=Mock(),
@@ -659,7 +693,7 @@ class TestDeleteTrigger:
             hard_delete=False,
         )
 
-        mock_trigger_service.delete_trigger.assert_called_once_with(
+        mock_crud_trigger.delete_with_tenant.assert_called_once_with(
             db=mock_db,
             trigger_id=sample_trigger_id,
             tenant_id=str(current_user_with_tenant["tenant_id"]),
@@ -672,10 +706,10 @@ class TestDeleteTrigger:
         mock_db,
         current_user_with_tenant,
         sample_trigger_id,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test hard delete of trigger."""
-        mock_trigger_service.delete_trigger = AsyncMock(return_value=True)
+        mock_crud_trigger.delete_with_tenant = AsyncMock(return_value=True)
 
         await delete_trigger(
             _request=Mock(),
@@ -685,7 +719,7 @@ class TestDeleteTrigger:
             hard_delete=True,
         )
 
-        mock_trigger_service.delete_trigger.assert_called_once_with(
+        mock_crud_trigger.delete_with_tenant.assert_called_once_with(
             db=mock_db,
             trigger_id=sample_trigger_id,
             tenant_id=str(current_user_with_tenant["tenant_id"]),
@@ -698,10 +732,10 @@ class TestDeleteTrigger:
         mock_db,
         current_user_with_tenant,
         sample_trigger_id,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test delete when trigger doesn't exist."""
-        mock_trigger_service.delete_trigger = AsyncMock(return_value=False)
+        mock_crud_trigger.delete_with_tenant = AsyncMock(return_value=False)
 
         with pytest.raises(NotFoundException, match=f"Trigger {sample_trigger_id} not found"):
             await delete_trigger(
@@ -723,13 +757,18 @@ class TestEnableDisableTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful trigger enable."""
         enabled_trigger = sample_email_trigger_read.model_copy()
         enabled_trigger.active = True
 
-        mock_trigger_service.update_trigger = AsyncMock(return_value=enabled_trigger)
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in enabled_trigger.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.enable_trigger = AsyncMock(return_value=db_trigger)
 
         result = await enable_trigger(
             _request=Mock(),
@@ -739,10 +778,7 @@ class TestEnableDisableTrigger:
         )
 
         assert result.active is True
-
-        # Verify correct update was called
-        call_args = mock_trigger_service.update_trigger.call_args
-        assert call_args.kwargs["trigger_in"].active is True
+        mock_crud_trigger.enable_trigger.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_disable_trigger_success(
@@ -751,13 +787,18 @@ class TestEnableDisableTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful trigger disable."""
         disabled_trigger = sample_email_trigger_read.model_copy()
         disabled_trigger.active = False
 
-        mock_trigger_service.update_trigger = AsyncMock(return_value=disabled_trigger)
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in disabled_trigger.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.disable_trigger = AsyncMock(return_value=db_trigger)
 
         result = await disable_trigger(
             _request=Mock(),
@@ -767,10 +808,7 @@ class TestEnableDisableTrigger:
         )
 
         assert result.active is False
-
-        # Verify correct update was called
-        call_args = mock_trigger_service.update_trigger.call_args
-        assert call_args.kwargs["trigger_in"].active is False
+        mock_crud_trigger.disable_trigger.assert_called_once()
 
 
 class TestEmailTriggerTest:
@@ -783,7 +821,7 @@ class TestEmailTriggerTest:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful email trigger test."""
         test_result = TriggerTestResult(
@@ -794,8 +832,13 @@ class TestEmailTriggerTest:
             duration_ms=150,
         )
 
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
-        mock_trigger_service.test_trigger = AsyncMock(return_value=test_result)
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.test_trigger = AsyncMock(return_value=test_result)
 
         result = await send_test_email_trigger(
             _request=Mock(),
@@ -807,7 +850,7 @@ class TestEmailTriggerTest:
 
         assert result.success is True
         assert result.trigger_id == uuid.UUID(sample_trigger_id)
-        mock_trigger_service.test_trigger.assert_called_once()
+        mock_crud_trigger.test_trigger.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_test_email_trigger_wrong_type(
@@ -816,10 +859,15 @@ class TestEmailTriggerTest:
         current_user_with_tenant,
         sample_trigger_id,
         sample_webhook_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test testing a non-email trigger through email test endpoint."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_webhook_trigger_read)
+        # Mock returns webhook trigger DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_webhook_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
 
         with pytest.raises(
             BadRequestException,
@@ -840,11 +888,16 @@ class TestEmailTriggerTest:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test email trigger test failure."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
-        mock_trigger_service.test_trigger = AsyncMock(side_effect=Exception("SMTP connection failed"))
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.test_trigger = AsyncMock(side_effect=Exception("SMTP connection failed"))
 
         result = await send_test_email_trigger(
             _request=Mock(),
@@ -868,7 +921,7 @@ class TestWebhookTriggerTest:
         current_user_with_tenant,
         sample_trigger_id,
         sample_webhook_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful webhook trigger test."""
         test_result = TriggerTestResult(
@@ -879,8 +932,13 @@ class TestWebhookTriggerTest:
             duration_ms=75,
         )
 
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_webhook_trigger_read)
-        mock_trigger_service.test_trigger = AsyncMock(return_value=test_result)
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_webhook_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.test_trigger = AsyncMock(return_value=test_result)
 
         result = await send_test_webhook_trigger(
             _request=Mock(),
@@ -892,7 +950,7 @@ class TestWebhookTriggerTest:
 
         assert result.success is True
         assert result.trigger_id == uuid.UUID(sample_trigger_id)
-        mock_trigger_service.test_trigger.assert_called_once()
+        mock_crud_trigger.test_trigger.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_test_webhook_trigger_wrong_type(
@@ -901,10 +959,15 @@ class TestWebhookTriggerTest:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test testing a non-webhook trigger through webhook test endpoint."""
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
+        # Mock returns email trigger DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
 
         with pytest.raises(
             BadRequestException,
@@ -929,7 +992,7 @@ class TestValidateTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test successful trigger validation."""
         validation_result = TriggerValidationResult(
@@ -939,8 +1002,13 @@ class TestValidateTrigger:
             warnings=[],
         )
 
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
-        mock_trigger_service.validate_trigger = AsyncMock(return_value=validation_result)
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.validate_trigger = AsyncMock(return_value=validation_result)
 
         result = await validate_trigger(
             _request=Mock(),
@@ -952,7 +1020,7 @@ class TestValidateTrigger:
 
         assert result.is_valid is True
         assert len(result.errors) == 0
-        mock_trigger_service.validate_trigger.assert_called_once()
+        mock_crud_trigger.validate_trigger.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_validate_trigger_with_errors(
@@ -961,7 +1029,7 @@ class TestValidateTrigger:
         current_user_with_tenant,
         sample_trigger_id,
         sample_email_trigger_read,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test trigger validation with errors."""
         validation_result = TriggerValidationResult(
@@ -971,8 +1039,13 @@ class TestValidateTrigger:
             warnings=["Recipients list is empty"],
         )
 
-        mock_trigger_service.get_trigger_by_id = AsyncMock(return_value=sample_email_trigger_read)
-        mock_trigger_service.validate_trigger = AsyncMock(return_value=validation_result)
+        # Mock returns DB model
+        from unittest.mock import MagicMock
+        db_trigger = MagicMock()
+        for attr, value in sample_email_trigger_read.model_dump().items():
+            setattr(db_trigger, attr, value)
+        mock_crud_trigger.get = AsyncMock(return_value=db_trigger)
+        mock_crud_trigger.validate_trigger = AsyncMock(return_value=validation_result)
 
         result = await validate_trigger(
             _request=Mock(),
@@ -1032,11 +1105,11 @@ class TestTriggerEndpointEdgeCases:
         self,
         mock_db,
         current_user_with_tenant,
-        mock_trigger_service,
+        mock_crud_trigger,
     ):
         """Test pagination with edge cases."""
         # Test with very large page number
-        mock_trigger_service.get_multi = AsyncMock(
+        mock_crud_trigger.get_paginated = AsyncMock(
             return_value={"items": [], "total": 10, "page": 1000, "size": 50, "pages": 1}
         )
 
