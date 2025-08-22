@@ -55,7 +55,7 @@ def sample_network_create():
         network_type="EVM",
         block_time_ms=12000,
         description="Test EVM network for testing",
-        network_passphrase="Test Network Passphrase",
+        network_passphrase=None,  # EVM networks don't have network passphrase
         chain_id=1337,
         rpc_urls=[
             {"url": "https://test-rpc.example.com", "type_": "primary", "weight": 100}
@@ -78,6 +78,7 @@ def sample_network_read(sample_network_id):
         network_type="EVM",
         block_time_ms=12000,
         description="Test EVM network for testing",
+        network_passphrase=None,  # EVM networks don't have network passphrase
         chain_id=1337,
         rpc_urls=[
             {"url": "https://test-rpc.example.com", "type_": "primary", "weight": 100}
@@ -127,15 +128,8 @@ class TestListNetworks:
         mock_network_service,
     ):
         """Test successful network listing with pagination."""
-        # Mock service response
-        # Create a mock pagination result object
-        mock_result = Mock()
-        mock_result.items = [sample_network_read]
-        mock_result.total = 1
-        mock_result.page = 1
-        mock_result.size = 50
-        mock_result.pages = 1
-        mock_result.model_dump.return_value = {
+        # Mock service response - service returns a dict
+        mock_result = {
             "items": [sample_network_read],
             "total": 1,
             "page": 1,
@@ -175,14 +169,14 @@ class TestListNetworks:
         mock_network_service,
     ):
         """Test network listing with filters."""
-        # Create a mock pagination result object
-        mock_result = Mock()
-        mock_result.items = []
-        mock_result.total = 0
-        mock_result.page = 1
-        mock_result.size = 50
-        mock_result.pages = 0
-        mock_result.model_dump.return_value = {"items": [], "total": 0, "page": 1, "size": 50, "pages": 0}
+        # Mock service response - service returns a dict
+        mock_result = {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "size": 50,
+            "pages": 0
+        }
 
         mock_network_service.list_networks = AsyncMock(
             return_value=mock_result
@@ -216,14 +210,14 @@ class TestListNetworks:
         mock_network_service,
     ):
         """Test listing networks when database is empty."""
-        # Create a mock pagination result object
-        mock_result = Mock()
-        mock_result.items = []
-        mock_result.total = 0
-        mock_result.page = 1
-        mock_result.size = 50
-        mock_result.pages = 0
-        mock_result.model_dump.return_value = {"items": [], "total": 0, "page": 1, "size": 50, "pages": 0}
+        # Mock service response - service returns a dict
+        mock_result = {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "size": 50,
+            "pages": 0
+        }
 
         mock_network_service.list_networks = AsyncMock(
             return_value=mock_result
@@ -261,15 +255,9 @@ class TestListNetworks:
         # Create multiple networks for pagination
         networks = [sample_network_read for _ in range(5)]
 
-        # Create a mock pagination result object
-        mock_result = Mock()
-        mock_result.items = networks[:2]  # Return only 2 items for page 2
-        mock_result.total = 5
-        mock_result.page = 2
-        mock_result.size = 2
-        mock_result.pages = 3
-        mock_result.model_dump.return_value = {
-            "items": networks[:2],
+        # Mock service response - service returns a dict
+        mock_result = {
+            "items": networks[:2],  # Return only 2 items for page 2
             "total": 5,
             "page": 2,
             "size": 2,
@@ -310,14 +298,8 @@ class TestListNetworks:
         mock_network_service,
     ):
         """Test network listing with different sorting options."""
-        # Create a mock pagination result object
-        mock_result = Mock()
-        mock_result.items = [sample_network_read]
-        mock_result.total = 1
-        mock_result.page = 1
-        mock_result.size = 50
-        mock_result.pages = 1
-        mock_result.model_dump.return_value = {
+        # Mock service response - service returns a dict
+        mock_result = {
             "items": [sample_network_read],
             "total": 1,
             "page": 1,
@@ -380,14 +362,14 @@ class TestListNetworks:
             "tenant_id": uuid.uuid4(),
         }
 
-        # Create a mock pagination result object
-        mock_result = Mock()
-        mock_result.items = []
-        mock_result.total = 0
-        mock_result.page = 1
-        mock_result.size = 50
-        mock_result.pages = 0
-        mock_result.model_dump.return_value = {"items": [], "total": 0, "page": 1, "size": 50, "pages": 0}
+        # Mock service response - service returns a dict
+        mock_result = {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "size": 50,
+            "pages": 0
+        }
 
         mock_network_service.list_networks = AsyncMock(
             return_value=mock_result
@@ -532,7 +514,7 @@ class TestCreateNetwork:
             slug="test-network",
             network_type="EVM",  # Valid for schema
             description="Test network description",
-            network_passphrase="Test Passphrase",
+            network_passphrase=None,  # EVM networks don't have network passphrase
             block_time_ms=12000,
             chain_id=1,
             rpc_urls=[{"url": "https://test.com", "type_": "primary", "weight": 100}],
@@ -634,7 +616,7 @@ class TestUpdateNetwork:
             name="Updated Test Network",
             slug="updated-test-network",
             description="Updated description",
-            network_passphrase="Updated Passphrase",
+            network_passphrase=None,  # EVM networks don't have network passphrase
             block_time_ms=15000,
             confirmation_blocks=5,
             max_past_blocks=100,
@@ -675,7 +657,7 @@ class TestUpdateNetwork:
             name="Updated Network",
             slug="existing-slug",
             description="Updated description",
-            network_passphrase="Updated Passphrase",
+            network_passphrase=None,  # EVM networks don't have network passphrase
             block_time_ms=12000,
             confirmation_blocks=2,
             max_past_blocks=50,

@@ -4,7 +4,7 @@ Tests all CRUD operations, type-specific endpoints, and test/validation endpoint
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -122,9 +122,9 @@ def sample_email_trigger_read(sample_trigger_id, sample_tenant_id):
         active=True,
         validated=True,
         validation_errors=None,
-        last_validated_at=datetime.utcnow(),
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        last_validated_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         email_config=EmailTriggerRead(
             trigger_id=uuid.UUID(sample_trigger_id),
             host="smtp.gmail.com",
@@ -137,8 +137,8 @@ def sample_email_trigger_read(sample_trigger_id, sample_tenant_id):
             recipients=["user1@example.com"],
             message_title="Alert",
             message_body="Alert body",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         ),
         webhook_config=None,
     )
@@ -157,9 +157,9 @@ def sample_webhook_trigger_read(sample_trigger_id, sample_tenant_id):
         active=True,
         validated=True,
         validation_errors=None,
-        last_validated_at=datetime.utcnow(),
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        last_validated_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         email_config=None,
         webhook_config=WebhookTriggerRead(
             trigger_id=uuid.UUID(sample_trigger_id),
@@ -171,8 +171,8 @@ def sample_webhook_trigger_read(sample_trigger_id, sample_tenant_id):
             secret_value=None,
             message_title="Alert",
             message_body="Alert body",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         ),
     )
 
@@ -855,7 +855,7 @@ class TestEmailTriggerTest:
         )
 
         assert result.success is False
-        assert "SMTP connection failed" in result.error
+        assert result.error is not None and "SMTP connection failed" in result.error
 
 
 class TestWebhookTriggerTest:

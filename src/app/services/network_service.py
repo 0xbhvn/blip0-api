@@ -158,7 +158,7 @@ class NetworkService:
         if not existing:
             return None
 
-        old_slug = str(existing.slug) if hasattr(existing, 'slug') else ""
+        old_slug = str(existing.slug) if hasattr(existing, 'slug') else ""  # type: ignore[attr-defined]
 
         # Update in PostgreSQL
         db_network = await self.crud_network.update(
@@ -177,7 +177,7 @@ class NetworkService:
         await self._cache_network(db_network)
 
         if hasattr(db_network, 'slug'):
-            logger.info(f"Updated platform network {db_network.slug}")
+            logger.info(f"Updated platform network {db_network.slug}")  # type: ignore[attr-defined]
         else:
             logger.info(f"Updated platform network {network_id}")
         return NetworkRead.model_validate(db_network)
@@ -204,7 +204,7 @@ class NetworkService:
         if not existing:
             return False
 
-        slug = str(existing.slug) if hasattr(existing, 'slug') else ""
+        slug = str(existing.slug) if hasattr(existing, 'slug') else ""  # type: ignore[attr-defined]
 
         # Delete from PostgreSQL
         try:

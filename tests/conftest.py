@@ -114,22 +114,22 @@ def override_dependency(dependency: Callable[..., Any], mocked_response: Any) ->
 @pytest.fixture
 def override_get_db(async_db):
     """Override the database dependency for tests that need it."""
-    from src.app.api.dependencies import get_db
+    from src.app.core.db.database import async_get_db
 
     async def _override_get_db():
         yield async_db
 
     # Store original dependency
-    original = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = _override_get_db
+    original = app.dependency_overrides.get(async_get_db)
+    app.dependency_overrides[async_get_db] = _override_get_db
 
     yield _override_get_db
 
     # Clean up override after test
     if original is None:
-        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(async_get_db, None)
     else:
-        app.dependency_overrides[get_db] = original
+        app.dependency_overrides[async_get_db] = original
 
 
 @pytest.fixture

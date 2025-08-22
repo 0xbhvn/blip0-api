@@ -4,7 +4,7 @@ Tests all CRUD operations, tenant management, and admin-specific features.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -74,7 +74,6 @@ def sample_tenant_create():
         name="Test Company",
         slug="test-company",
         plan="starter",
-        description="Test company description",
         settings={"timezone": "UTC"},
     )
 
@@ -90,8 +89,8 @@ def sample_tenant_read(sample_tenant_id):
         status="active",
         settings={"timezone": "UTC"},
         is_active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -106,8 +105,8 @@ def sample_tenant_with_limits(sample_tenant_id):
         status="active",
         settings={"timezone": "UTC"},
         is_active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         limits=TenantLimitsRead(
             tenant_id=sample_tenant_id,
             max_monitors=50,
@@ -120,8 +119,8 @@ def sample_tenant_with_limits(sample_tenant_id):
             current_networks=2,
             current_triggers=10,
             current_storage_gb=1.0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         ),
     )
 
@@ -137,8 +136,8 @@ def sample_tenant_admin_read(sample_tenant_id):
         status="active",
         settings={"timezone": "UTC"},
         is_active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         limits=TenantLimitsRead(
             tenant_id=sample_tenant_id,
             max_monitors=50,
@@ -151,8 +150,8 @@ def sample_tenant_admin_read(sample_tenant_id):
             current_networks=2,
             current_triggers=10,
             current_storage_gb=1.0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         ),
         user_count=10,
         monitor_count=5,
@@ -204,7 +203,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             page=1,
             size=50,
             name=None,
@@ -237,7 +236,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             page=1,
             size=50,
             name="test",
@@ -282,7 +281,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             page=2,
             size=10,
             name=None,
@@ -316,7 +315,7 @@ class TestListTenants:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             page=1,
             size=50,
             name="nonexistent",
@@ -353,7 +352,7 @@ class TestCreateTenant:
             _request=Mock(),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             tenant_in=sample_tenant_create,
         )
 
@@ -383,7 +382,7 @@ class TestCreateTenant:
                 _request=Mock(),
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
                 tenant_in=sample_tenant_create,
             )
 
@@ -406,7 +405,6 @@ class TestCreateTenant:
                 name=f"Test {plan}",
                 slug=f"test-{plan}",
                 plan=plan,
-                description=f"Test {plan} tenant",
             )
 
             mock_crud_tenant.create_with_limits = AsyncMock(
@@ -417,7 +415,7 @@ class TestCreateTenant:
                 _request=Mock(),
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
                 tenant_in=tenant_create,
             )
 
@@ -441,7 +439,7 @@ class TestCreateTenant:
                 _request=Mock(),
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
                 tenant_in=sample_tenant_create,
             )
 
@@ -478,7 +476,7 @@ class TestGetTenant:
             tenant_id=str(sample_tenant_id),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
         )
 
         assert result.id == sample_tenant_id
@@ -500,7 +498,7 @@ class TestGetTenant:
                 tenant_id="invalid-uuid",
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -520,7 +518,7 @@ class TestGetTenant:
                 tenant_id=str(sample_tenant_id),
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
 
@@ -538,8 +536,8 @@ class TestUpdateTenant:
     ):
         """Test successful tenant update."""
         tenant_update = TenantUpdate(
+            slug="test-company",
             name="Updated Company",
-            description="Updated description",
         )
 
         updated_tenant = TenantRead(
@@ -553,7 +551,7 @@ class TestUpdateTenant:
             tenant_update=tenant_update,
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
         )
 
         assert result.name == "Updated Company"
@@ -567,7 +565,7 @@ class TestUpdateTenant:
         sample_admin_user,
     ):
         """Test update tenant with invalid UUID."""
-        tenant_update = TenantUpdate(name="Updated")
+        tenant_update = TenantUpdate(slug="test-company", name="Updated")
 
         with pytest.raises(BadRequestException, match="Invalid tenant ID format"):
             await update_tenant(
@@ -576,7 +574,7 @@ class TestUpdateTenant:
                 tenant_update=tenant_update,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -588,7 +586,7 @@ class TestUpdateTenant:
         mock_tenant_service,
     ):
         """Test update tenant when tenant doesn't exist."""
-        tenant_update = TenantUpdate(name="Updated")
+        tenant_update = TenantUpdate(slug="test-company", name="Updated")
         mock_tenant_service.update_tenant = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
@@ -598,7 +596,7 @@ class TestUpdateTenant:
                 tenant_update=tenant_update,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -612,7 +610,7 @@ class TestUpdateTenant:
         """Test update tenant with duplicate name."""
         from sqlalchemy.exc import IntegrityError
 
-        tenant_update = TenantUpdate(name="Existing Company")
+        tenant_update = TenantUpdate(slug="test-company", name="Existing Company")
         mock_tenant_service.update_tenant = AsyncMock(
             side_effect=IntegrityError("duplicate key", None, Exception("duplicate key error"))
         )
@@ -624,7 +622,7 @@ class TestUpdateTenant:
                 tenant_update=tenant_update,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
         mock_db.rollback.assert_called_once()
@@ -653,7 +651,7 @@ class TestDeleteTenant:
             tenant_id=str(target_tenant_id),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             is_hard_delete=False,
         )
 
@@ -681,7 +679,7 @@ class TestDeleteTenant:
             tenant_id=str(target_tenant_id),
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
             is_hard_delete=True,
         )
 
@@ -707,7 +705,7 @@ class TestDeleteTenant:
                 tenant_id=str(sample_tenant_id),  # Same as admin's tenant
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
                 is_hard_delete=False,
             )
 
@@ -728,7 +726,7 @@ class TestDeleteTenant:
                 tenant_id=str(uuid.uuid4()),
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
                 is_hard_delete=False,
             )
 
@@ -751,7 +749,7 @@ class TestDeleteTenant:
                 tenant_id=str(target_tenant_id),
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
                 is_hard_delete=False,
             )
 
@@ -786,7 +784,7 @@ class TestSuspendTenant:
             suspend_request=suspend_request,
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
         )
 
         assert result.status == "suspended"
@@ -815,7 +813,7 @@ class TestSuspendTenant:
                 suspend_request=suspend_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -838,7 +836,7 @@ class TestSuspendTenant:
                 suspend_request=suspend_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -859,7 +857,7 @@ class TestSuspendTenant:
                 suspend_request=suspend_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
 
@@ -895,7 +893,7 @@ class TestActivateTenant:
             activate_request=activate_request,
             db=mock_db,
             admin_user=sample_admin_user,
-            _rate_limit=Mock(),
+            _rate_limit=None,
         )
 
         assert result.status == "active"
@@ -921,7 +919,7 @@ class TestActivateTenant:
                 activate_request=activate_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -942,7 +940,7 @@ class TestActivateTenant:
                 activate_request=activate_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )
 
     @pytest.mark.asyncio
@@ -968,5 +966,5 @@ class TestActivateTenant:
                 activate_request=activate_request,
                 db=mock_db,
                 admin_user=sample_admin_user,
-                _rate_limit=Mock(),
+                _rate_limit=None,
             )

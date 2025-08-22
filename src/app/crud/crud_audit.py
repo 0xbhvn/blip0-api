@@ -638,9 +638,9 @@ class CRUDTriggerExecution(
                 execution.started_at = datetime.now(UTC)
             elif status in ["success", "failed", "timeout"]:
                 execution.completed_at = datetime.now(UTC)
-                if execution.started_at and execution.completed_at:
-                    duration = (execution.completed_at -
-                                execution.started_at).total_seconds()
+                if execution.started_at is not None and execution.completed_at is not None:
+                    # Calculate duration only when both timestamps exist
+                    duration = (execution.completed_at - execution.started_at).total_seconds()  # type: ignore[operator]
                     execution.duration_ms = int(duration * 1000)
 
             if error_message:

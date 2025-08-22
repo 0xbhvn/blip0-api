@@ -125,6 +125,7 @@ class TestMonitorService:
         """Sample monitor update data."""
         return MonitorUpdate(
             name="Updated Monitor",
+            slug="updated-monitor",
             description="Updated description",
             paused=True
         )
@@ -743,8 +744,8 @@ class TestMonitorServiceCachingMethods:
         """Test successful monitor caching."""
         tenant_id = "test-tenant"
 
-        with patch("src.app.services.monitor_service.redis_client.set") as mock_set:
-            mock_set.return_value = AsyncMock(return_value=True)()
+        with patch("src.app.services.monitor_service.redis_client.set", new_callable=AsyncMock) as mock_set:
+            mock_set.return_value = True
 
             await monitor_service._cache_monitor(sample_monitor, tenant_id)
 
@@ -860,7 +861,7 @@ class TestMonitorServiceCachingMethods:
         tenant_id = "test-tenant"
         monitor_id = str(uuid.uuid4())
 
-        with patch("src.app.services.monitor_service.redis_client.get") as mock_get:
+        with patch("src.app.services.monitor_service.redis_client.get", new_callable=AsyncMock) as mock_get:
             mock_get.side_effect = Exception("Redis error")
 
             result = await monitor_service._get_cached_monitor(tenant_id, monitor_id)
@@ -873,7 +874,7 @@ class TestMonitorServiceCachingMethods:
         tenant_id = "test-tenant"
         monitor_id = str(uuid.uuid4())
 
-        with patch("src.app.services.monitor_service.redis_client.delete") as mock_delete:
+        with patch("src.app.services.monitor_service.redis_client.delete", new_callable=AsyncMock) as mock_delete:
             await monitor_service._invalidate_monitor_cache(tenant_id, monitor_id)
 
             expected_key = f"tenant:{tenant_id}:monitor:{monitor_id}"
@@ -921,7 +922,7 @@ class TestMonitorServiceCachingMethods:
             ]
         }
 
-        with patch("src.app.services.monitor_service.redis_client.set") as mock_set:
+        with patch("src.app.services.monitor_service.redis_client.set", new_callable=AsyncMock) as mock_set:
             await monitor_service._cache_monitor_denormalized(
                 monitor_dict, tenant_id, monitor_id
             )

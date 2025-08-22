@@ -220,8 +220,9 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     """Handle unexpected exceptions."""
     request_id = getattr(request.state, "request_id", None)
     # Log the full exception for debugging
+    import sys
     import traceback
-    traceback.print_exc()
+    traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -368,7 +369,7 @@ def create_application(
         )
 
     # Request logging middleware
-    if hasattr(settings, "ENVIRONMENT") and settings.ENVIRONMENT != EnvironmentOption.PRODUCTION:
+    if isinstance(settings, EnvironmentSettings) and settings.ENVIRONMENT != EnvironmentOption.PRODUCTION:
         # More verbose logging in non-production
         application.add_middleware(
             RequestLoggingMiddleware,

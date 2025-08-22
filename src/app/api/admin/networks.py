@@ -88,19 +88,10 @@ async def list_networks(
         sort=sort,
     )
 
-    if hasattr(result, 'items') and hasattr(result, 'total'):
-        # result is a Pydantic model
-        items_list: list[Any] = result.items if isinstance(result.items, list) else []
-        logger.info(f"Returned {len(items_list)} networks (total={result.total})")
-        return result.model_dump() if hasattr(result, 'model_dump') else dict(result)
-    elif isinstance(result, dict):
-        # Handle dict return type
-        items = result.get('items', [])
-        logger.info(f"Returned {len(items)} networks (total={result.get('total', 0)})")
-        return result
-    else:
-        # Fallback
-        return {"items": [], "total": 0, "page": page, "size": size, "pages": 0}
+    # The service always returns a dict with items, total, page, size, pages
+    items = result.get("items", [])
+    logger.info(f"Returned {len(items)} networks (total={result.get('total', 0)})")
+    return result
 
 
 @router.post("", response_model=NetworkRead, status_code=201)
@@ -136,26 +127,25 @@ async def create_network(
 
             # Ensure platform tenant exists (simple approach)
             from ...crud.crud_tenant import crud_tenant
+
             platform_tenant = await crud_tenant.get(db=db, id=platform_tenant_id)
             if not platform_tenant:
                 # Create minimal platform tenant
                 from ...schemas.tenant import TenantCreateInternal
+
                 tenant_data = TenantCreateInternal(
                     id=platform_tenant_id,
                     name="Platform Admin",
                     slug="platform-admin",
                     plan="enterprise",
                     status="active",
-                    settings={}
+                    settings={},
                 )
                 await crud_tenant.create(db=db, object=tenant_data)
                 await db.flush()  # Ensure tenant exists before network creation
                 logger.info(f"Created platform tenant {platform_tenant_id}")
 
-            network_in_with_tenant = NetworkCreate(
-                tenant_id=platform_tenant_id,
-                **network_in.model_dump()
-            )
+            network_in_with_tenant = NetworkCreate(tenant_id=platform_tenant_id, **network_in.model_dump())
 
             network = await network_service.create_network(
                 db=db,
@@ -347,6 +337,7 @@ async def validate_network(
         # Note: validate_network method needs to be implemented in network_service
         # For now, return a mock validation result
         from datetime import UTC, datetime
+
         result = NetworkValidationResult(
             network_id=uuid_pkg.UUID(network_id),
             is_valid=True,
@@ -354,7 +345,7 @@ async def validate_network(
             warnings=[],
             rpc_status={},
             current_block_height=None,
-            validated_at=datetime.now(UTC)
+            validated_at=datetime.now(UTC),
         )
 
         logger.info(f"Validated network {network_id}: valid={result.is_valid}")
@@ -364,6 +355,7 @@ async def validate_network(
         logger.error(f"Failed to validate network: {e}")
         # Return validation failure instead of raising exception
         from datetime import UTC, datetime
+
         return NetworkValidationResult(
             network_id=uuid_pkg.UUID(network_id),
             is_valid=False,
@@ -371,5 +363,5 @@ async def validate_network(
             warnings=[],
             rpc_status={},
             current_block_height=None,
-            validated_at=datetime.now(UTC)
+            validated_at=datetime.now(UTC),
         )

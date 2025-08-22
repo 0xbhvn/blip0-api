@@ -45,7 +45,7 @@ class TestWorkerSettingsConfiguration:
 
     def test_worker_settings_startup_function(self):
         """Test startup function configuration."""
-        on_startup = WorkerSettings.on_startup
+        on_startup = getattr(WorkerSettings, 'on_startup')
 
         assert on_startup is startup
         assert callable(on_startup)
@@ -53,7 +53,7 @@ class TestWorkerSettingsConfiguration:
 
     def test_worker_settings_shutdown_function(self):
         """Test shutdown function configuration."""
-        on_shutdown = WorkerSettings.on_shutdown
+        on_shutdown = getattr(WorkerSettings, 'on_shutdown')
 
         assert on_shutdown is shutdown
         assert callable(on_shutdown)
@@ -103,16 +103,16 @@ class TestWorkerSettingsConfiguration:
         original_functions = WorkerSettings.functions.copy()
         original_redis_host = WorkerSettings.redis_settings.host
         original_redis_port = WorkerSettings.redis_settings.port
-        original_startup = WorkerSettings.on_startup
-        original_shutdown = WorkerSettings.on_shutdown
+        original_startup = getattr(WorkerSettings, 'on_startup')
+        original_shutdown = getattr(WorkerSettings, 'on_shutdown')
         original_handle_signals = WorkerSettings.handle_signals
 
         # Verify values haven't changed
         assert WorkerSettings.functions == original_functions
         assert WorkerSettings.redis_settings.host == original_redis_host
         assert WorkerSettings.redis_settings.port == original_redis_port
-        assert WorkerSettings.on_startup == original_startup
-        assert WorkerSettings.on_shutdown == original_shutdown
+        assert getattr(WorkerSettings, 'on_startup') == original_startup
+        assert getattr(WorkerSettings, 'on_shutdown') == original_shutdown
         assert WorkerSettings.handle_signals == original_handle_signals
 
 
@@ -219,8 +219,8 @@ class TestWorkerSettingsValidation:
 
     def test_startup_and_shutdown_functions_exist(self):
         """Test that startup and shutdown functions are properly set."""
-        on_startup = WorkerSettings.on_startup
-        on_shutdown = WorkerSettings.on_shutdown
+        on_startup = getattr(WorkerSettings, 'on_startup')
+        on_shutdown = getattr(WorkerSettings, 'on_shutdown')
 
         assert on_startup is not None
         assert on_shutdown is not None
@@ -269,8 +269,8 @@ class TestWorkerSettingsImports:
         # Verify that the functions in the settings are the same objects
         # as the ones imported from functions module
         assert sample_background_task in WorkerSettings.functions
-        assert WorkerSettings.on_startup is startup
-        assert WorkerSettings.on_shutdown is shutdown
+        assert getattr(WorkerSettings, 'on_startup') is startup
+        assert getattr(WorkerSettings, 'on_shutdown') is shutdown
 
     def test_imported_functions_maintain_metadata(self):
         """Test that imported functions maintain their metadata."""
@@ -285,8 +285,8 @@ class TestWorkerSettingsImports:
 
     def test_startup_shutdown_function_imports(self):
         """Test startup and shutdown function imports."""
-        on_startup = WorkerSettings.on_startup
-        on_shutdown = WorkerSettings.on_shutdown
+        on_startup = getattr(WorkerSettings, 'on_startup')
+        on_shutdown = getattr(WorkerSettings, 'on_shutdown')
 
         # Should be the actual imported functions, not references
         assert on_startup.__name__ == 'startup'
@@ -305,8 +305,8 @@ class TestWorkerSettingsImports:
             # Should be able to access all components without issues
             assert WorkerSettings.functions is not None
             assert WorkerSettings.redis_settings is not None
-            assert WorkerSettings.on_startup is not None
-            assert WorkerSettings.on_shutdown is not None
+            assert getattr(WorkerSettings, 'on_startup') is not None
+            assert getattr(WorkerSettings, 'on_shutdown') is not None
 
         except ImportError as e:
             pytest.fail(f"Circular import detected: {e}")
@@ -345,7 +345,7 @@ class TestWorkerSettingsExtensibility:
     def test_additional_functions_can_be_added(self):
         """Test that additional functions can be added to the functions list."""
 
-        async def custom_task(ctx, name: str) -> str:
+        async def custom_task(_ctx, name: str) -> str:
             return f"Custom task {name}"
 
         class CustomWorkerSettings(WorkerSettings):
@@ -364,8 +364,8 @@ class TestWorkerSettingsEdgeCases:
         class EmptyFunctionsWorkerSettings:
             functions = []
             redis_settings = WorkerSettings.redis_settings
-            on_startup = WorkerSettings.on_startup
-            on_shutdown = WorkerSettings.on_shutdown
+            on_startup = getattr(WorkerSettings, 'on_startup')
+            on_shutdown = getattr(WorkerSettings, 'on_shutdown')
             handle_signals = WorkerSettings.handle_signals
 
         assert isinstance(EmptyFunctionsWorkerSettings.functions, list)
@@ -399,8 +399,8 @@ class TestWorkerSettingsEdgeCases:
         class InvalidRedisWorkerSettings:
             functions = WorkerSettings.functions
             redis_settings = "invalid_redis_settings"  # Not a RedisSettings object
-            on_startup = WorkerSettings.on_startup
-            on_shutdown = WorkerSettings.on_shutdown
+            on_startup = getattr(WorkerSettings, 'on_startup')
+            on_shutdown = getattr(WorkerSettings, 'on_shutdown')
             handle_signals = WorkerSettings.handle_signals
 
         # Should still be accessible, but won't work with ARQ

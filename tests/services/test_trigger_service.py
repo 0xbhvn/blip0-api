@@ -141,6 +141,7 @@ class TestTriggerService:
         """Sample trigger update data."""
         return TriggerUpdate(
             name="Updated Email Alert",
+            slug="updated-email-alert",
             description="Updated trigger description",
             active=False,
             email_config=EmailTriggerBase(
@@ -632,9 +633,8 @@ class TestTriggerService:
     ):
         """Test trigger validation."""
         validation_request = TriggerValidationRequest(
-            trigger_type="email",
-            config={"email": "test@example.com"},
-            trigger_id=uuid.uuid4()
+            trigger_id=uuid.uuid4(),
+            test_connection=True
         )
 
         validation_result = TriggerValidationResult(
@@ -998,13 +998,14 @@ class TestTriggerService:
         tenant_id = uuid.uuid4()
 
         # Mock triggers result
-        class MockDBObject:
-            def __init__(self, **kwargs):
-                for key, value in kwargs.items():
-                    setattr(self, key, value)
+        from typing import NamedTuple
+
+        class MockTrigger(NamedTuple):
+            id: uuid.UUID
+            name: str
 
         mock_triggers = [
-            MockDBObject(id=uuid.uuid4(), name=f"Trigger {i}") for i in range(3)
+            MockTrigger(id=uuid.uuid4(), name=f"Trigger {i}") for i in range(3)
         ]
         triggers_result = {"data": mock_triggers}
         trigger_service.crud_trigger.get_multi.return_value = triggers_result
@@ -1080,13 +1081,14 @@ class TestTriggerService:
         tenant_id = uuid.uuid4()
 
         # Mock triggers result
-        class MockDBObject:
-            def __init__(self, **kwargs):
-                for key, value in kwargs.items():
-                    setattr(self, key, value)
+        from typing import NamedTuple
+
+        class MockTrigger(NamedTuple):
+            id: uuid.UUID
+            name: str
 
         mock_triggers = [
-            MockDBObject(id=uuid.uuid4(), name=f"Trigger {i}") for i in range(3)
+            MockTrigger(id=uuid.uuid4(), name=f"Trigger {i}") for i in range(3)
         ]
         triggers_result = {"data": mock_triggers}
         trigger_service.crud_trigger.get_multi.return_value = triggers_result
