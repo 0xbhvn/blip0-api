@@ -117,10 +117,10 @@ def sample_monitor_read(sample_monitor_id, sample_tenant_id):
 
 
 @pytest.fixture
-def mock_monitor_service():
-    """Mock monitor service."""
-    with patch("src.app.api.v1.monitors.monitor_service") as mock_service:
-        yield mock_service
+def mock_crud_monitor():
+    """Mock monitor CRUD."""
+    with patch("src.app.api.v1.monitors.crud_monitor") as mock_crud:
+        yield mock_crud
 
 
 class TestListMonitors:
@@ -132,11 +132,11 @@ class TestListMonitors:
         mock_db,
         current_user_with_tenant,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful monitor listing with pagination."""
         # Mock service response
-        mock_monitor_service.list_monitors = AsyncMock(
+        mock_crud_monitor.get_paginated = AsyncMock(
             return_value={
                 "items": [sample_monitor_read],
                 "total": 1,
@@ -166,17 +166,17 @@ class TestListMonitors:
         assert result["total"] == 1
         assert len(result["items"]) == 1
         assert result["items"][0] == sample_monitor_read
-        mock_monitor_service.list_monitors.assert_called_once()
+        mock_crud_monitor.get_paginated.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_monitors_with_filters(
         self,
         mock_db,
         current_user_with_tenant,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor listing with filters."""
-        mock_monitor_service.list_monitors = AsyncMock(
+        mock_crud_monitor.get_paginated = AsyncMock(
             return_value={"items": [], "total": 0, "page": 1, "size": 50, "pages": 0}
         )
 
@@ -201,7 +201,7 @@ class TestListMonitors:
         assert len(result["items"]) == 0
 
         # Verify filter was constructed correctly
-        call_args = mock_monitor_service.list_monitors.call_args
+        call_args = mock_crud_monitor.get_paginated.call_args
         filters = call_args.kwargs["filters"]
         assert filters.name == "test"
         assert filters.slug == "test-slug"
@@ -244,10 +244,14 @@ class TestGetMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful single monitor retrieval."""
-        mock_monitor_service.get_monitor = AsyncMock(return_value=sample_monitor_read)
+        from unittest.mock import MagicMock
+        db_monitor = MagicMock()
+        for key, value in sample_monitor_read.model_dump().items():
+            setattr(db_monitor, key, value)
+        mock_crud_monitor.get = AsyncMock(return_value=db_monitor)
 
         result = await get_monitor(
             _request=Mock(),
@@ -258,9 +262,9 @@ class TestGetMonitor:
         )
 
         assert result == sample_monitor_read
-        mock_monitor_service.get_monitor.assert_called_once_with(
+        mock_crud_monitor.get.assert_called_once_with(
             db=mock_db,
-            monitor_id=sample_monitor_id,
+            id=sample_monitor_id,
             tenant_id=str(current_user_with_tenant["tenant_id"]),
         )
 
@@ -271,14 +275,14 @@ class TestGetMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor retrieval with triggers included."""
         monitor_with_triggers = {
             **sample_monitor_read.model_dump(),
             "triggers": [{"id": "trigger-1", "type": "email"}],
         }
-        mock_monitor_service.get_monitor_with_triggers = AsyncMock(
+        mock_crud_monitor.get_monitor_with_triggers = AsyncMock(
             return_value=monitor_with_triggers
         )
 
@@ -292,7 +296,7 @@ class TestGetMonitor:
 
         assert result == monitor_with_triggers
         assert isinstance(result, dict) and "triggers" in result
-        mock_monitor_service.get_monitor_with_triggers.assert_called_once()
+        mock_crud_monitor.get_monitor_with_triggers.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_monitor_invalid_id(
@@ -316,10 +320,10 @@ class TestGetMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor retrieval when monitor doesn't exist."""
-        mock_monitor_service.get_monitor = AsyncMock(return_value=None)
+        mock_crud_monitor.get = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match=f"Monitor {sample_monitor_id} not found"):
             await get_monitor(
@@ -341,13 +345,11 @@ class TestCreateMonitor:
         current_user_with_tenant,
         sample_monitor_create,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful monitor creation."""
-        mock_monitor_service.list_monitors = AsyncMock(
-            return_value={"total": 0, "items": []}
-        )
-        mock_monitor_service.create_monitor = AsyncMock(return_value=sample_monitor_read)
+        mock_crud_monitor.get_by_slug = AsyncMock(return_value=None)
+        mock_crud_monitor.create_with_tenant = AsyncMock(return_value=sample_monitor_read)
 
         result = await create_monitor(
             _request=Mock(),
@@ -357,9 +359,9 @@ class TestCreateMonitor:
         )
 
         assert result == sample_monitor_read
-        mock_monitor_service.create_monitor.assert_called_once_with(
+        mock_crud_monitor.create_with_tenant.assert_called_once_with(
             db=mock_db,
-            monitor_in=sample_monitor_create,
+            obj_in=sample_monitor_create,
             tenant_id=current_user_with_tenant["tenant_id"],
         )
 
@@ -388,12 +390,10 @@ class TestCreateMonitor:
         current_user_with_tenant,
         sample_monitor_create,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor creation with duplicate slug."""
-        mock_monitor_service.list_monitors = AsyncMock(
-            return_value={"total": 1, "items": [sample_monitor_read]}
-        )
+        mock_crud_monitor.get_by_slug = AsyncMock(return_value=sample_monitor_read)
 
         with pytest.raises(
             DuplicateValueException,
@@ -412,13 +412,11 @@ class TestCreateMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_create,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor creation with service error."""
-        mock_monitor_service.list_monitors = AsyncMock(
-            return_value={"total": 0, "items": []}
-        )
-        mock_monitor_service.create_monitor = AsyncMock(
+        mock_crud_monitor.get_by_slug = AsyncMock(return_value=None)
+        mock_crud_monitor.create_with_tenant = AsyncMock(
             side_effect=Exception("Database error")
         )
 
@@ -444,7 +442,7 @@ class TestUpdateMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful monitor update."""
         monitor_update = MonitorUpdate(slug="test-monitor", name="Updated Monitor", description="Updated description")
@@ -452,10 +450,8 @@ class TestUpdateMonitor:
         updated_monitor.name = "Updated Monitor"
 
         # Mock the duplicate slug check - same monitor so not a duplicate
-        mock_monitor_service.list_monitors = AsyncMock(
-            return_value={"total": 1, "items": [sample_monitor_read]}
-        )
-        mock_monitor_service.update_monitor = AsyncMock(return_value=updated_monitor)
+        mock_crud_monitor.get_by_slug = AsyncMock(return_value=sample_monitor_read)
+        mock_crud_monitor.update_with_tenant = AsyncMock(return_value=updated_monitor)
 
         result = await update_monitor(
             _request=Mock(),
@@ -466,7 +462,7 @@ class TestUpdateMonitor:
         )
 
         assert result.name == "Updated Monitor"
-        mock_monitor_service.update_monitor.assert_called_once()
+        mock_crud_monitor.update_with_tenant.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_update_monitor_duplicate_slug(
@@ -475,7 +471,7 @@ class TestUpdateMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor update with duplicate slug."""
         monitor_update = MonitorUpdate(slug="existing-slug", name="Existing Monitor")
@@ -485,9 +481,7 @@ class TestUpdateMonitor:
         different_monitor.id = uuid.uuid4()  # Different ID
 
         # Mock that another monitor with this slug exists
-        mock_monitor_service.list_monitors = AsyncMock(
-            return_value={"total": 1, "items": [different_monitor]}
-        )
+        mock_crud_monitor.get_by_slug = AsyncMock(return_value=different_monitor)
 
         with pytest.raises(
             DuplicateValueException,
@@ -507,15 +501,13 @@ class TestUpdateMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor update when monitor doesn't exist."""
         monitor_update = MonitorUpdate(slug="test-monitor", name="Updated Monitor")
         # Mock the duplicate slug check - no duplicates found
-        mock_monitor_service.list_monitors = AsyncMock(
-            return_value={"total": 0, "items": []}
-        )
-        mock_monitor_service.update_monitor = AsyncMock(return_value=None)
+        mock_crud_monitor.get_by_slug = AsyncMock(return_value=None)
+        mock_crud_monitor.update_with_tenant = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match=f"Monitor {sample_monitor_id} not found"):
             await update_monitor(
@@ -536,10 +528,10 @@ class TestDeleteMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test soft delete of monitor."""
-        mock_monitor_service.delete_monitor = AsyncMock(return_value=True)
+        mock_crud_monitor.delete_with_tenant = AsyncMock(return_value=True)
 
         await delete_monitor(
             _request=Mock(),
@@ -549,7 +541,7 @@ class TestDeleteMonitor:
             hard_delete=False,
         )
 
-        mock_monitor_service.delete_monitor.assert_called_once_with(
+        mock_crud_monitor.delete_with_tenant.assert_called_once_with(
             db=mock_db,
             monitor_id=sample_monitor_id,
             tenant_id=str(current_user_with_tenant["tenant_id"]),
@@ -562,10 +554,10 @@ class TestDeleteMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test hard delete of monitor."""
-        mock_monitor_service.delete_monitor = AsyncMock(return_value=True)
+        mock_crud_monitor.delete_with_tenant = AsyncMock(return_value=True)
 
         await delete_monitor(
             _request=Mock(),
@@ -575,7 +567,7 @@ class TestDeleteMonitor:
             hard_delete=True,
         )
 
-        mock_monitor_service.delete_monitor.assert_called_once_with(
+        mock_crud_monitor.delete_with_tenant.assert_called_once_with(
             db=mock_db,
             monitor_id=sample_monitor_id,
             tenant_id=str(current_user_with_tenant["tenant_id"]),
@@ -588,10 +580,10 @@ class TestDeleteMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test delete when monitor doesn't exist."""
-        mock_monitor_service.delete_monitor = AsyncMock(return_value=False)
+        mock_crud_monitor.delete_with_tenant = AsyncMock(return_value=False)
 
         with pytest.raises(NotFoundException, match=f"Monitor {sample_monitor_id} not found"):
             await delete_monitor(
@@ -613,14 +605,14 @@ class TestPauseResumeMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful monitor pause."""
         paused_monitor = sample_monitor_read.model_copy()
         paused_monitor.paused = True
         paused_monitor.active = False
 
-        mock_monitor_service.update_monitor = AsyncMock(return_value=paused_monitor)
+        mock_crud_monitor.pause_monitor = AsyncMock(return_value=paused_monitor)
 
         result = await pause_monitor(
             _request=Mock(),
@@ -633,9 +625,11 @@ class TestPauseResumeMonitor:
         assert result.active is False
 
         # Verify correct update was called
-        call_args = mock_monitor_service.update_monitor.call_args
-        assert call_args.kwargs["monitor_update"].paused is True
-        assert call_args.kwargs["monitor_update"].active is False
+        mock_crud_monitor.pause_monitor.assert_called_once_with(
+            db=mock_db,
+            monitor_id=sample_monitor_id,
+            tenant_id=str(current_user_with_tenant["tenant_id"]),
+        )
 
     @pytest.mark.asyncio
     async def test_resume_monitor_success(
@@ -644,14 +638,14 @@ class TestPauseResumeMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful monitor resume."""
         resumed_monitor = sample_monitor_read.model_copy()
         resumed_monitor.paused = False
         resumed_monitor.active = True
 
-        mock_monitor_service.update_monitor = AsyncMock(return_value=resumed_monitor)
+        mock_crud_monitor.resume_monitor = AsyncMock(return_value=resumed_monitor)
 
         result = await resume_monitor(
             _request=Mock(),
@@ -664,9 +658,11 @@ class TestPauseResumeMonitor:
         assert result.active is True
 
         # Verify correct update was called
-        call_args = mock_monitor_service.update_monitor.call_args
-        assert call_args.kwargs["monitor_update"].paused is False
-        assert call_args.kwargs["monitor_update"].active is True
+        mock_crud_monitor.resume_monitor.assert_called_once_with(
+            db=mock_db,
+            monitor_id=sample_monitor_id,
+            tenant_id=str(current_user_with_tenant["tenant_id"]),
+        )
 
 
 class TestValidateMonitor:
@@ -679,11 +675,15 @@ class TestValidateMonitor:
         current_user_with_tenant,
         sample_monitor_id,
         sample_monitor_read,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful monitor validation."""
-        mock_monitor_service.get_monitor = AsyncMock(return_value=sample_monitor_read)
-        mock_monitor_service.update_monitor = AsyncMock(return_value=sample_monitor_read)
+        from unittest.mock import MagicMock
+        db_monitor = MagicMock()
+        for key, value in sample_monitor_read.model_dump().items():
+            setattr(db_monitor, key, value)
+        mock_crud_monitor.get = AsyncMock(return_value=db_monitor)
+        mock_crud_monitor.update_with_tenant = AsyncMock(return_value=sample_monitor_read)
 
         result = await validate_monitor(
             _request=Mock(),
@@ -705,7 +705,7 @@ class TestValidateMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor validation with errors."""
         # Create a monitor with missing required fields
@@ -731,8 +731,12 @@ class TestValidateMonitor:
             last_validated_at=None,
         )
 
-        mock_monitor_service.get_monitor = AsyncMock(return_value=invalid_monitor)
-        mock_monitor_service.update_monitor = AsyncMock(return_value=invalid_monitor)
+        from unittest.mock import MagicMock
+        db_monitor = MagicMock()
+        for key, value in invalid_monitor.model_dump().items():
+            setattr(db_monitor, key, value)
+        mock_crud_monitor.get = AsyncMock(return_value=db_monitor)
+        mock_crud_monitor.update_with_tenant = AsyncMock(return_value=invalid_monitor)
 
         result = await validate_monitor(
             _request=Mock(),
@@ -755,7 +759,7 @@ class TestValidateMonitor:
         mock_db,
         current_user_with_tenant,
         sample_monitor_id,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test monitor validation with warnings."""
         # Monitor with no matching criteria or triggers
@@ -781,8 +785,12 @@ class TestValidateMonitor:
             last_validated_at=None,
         )
 
-        mock_monitor_service.get_monitor = AsyncMock(return_value=monitor_with_warnings)
-        mock_monitor_service.update_monitor = AsyncMock(return_value=monitor_with_warnings)
+        from unittest.mock import MagicMock
+        db_monitor = MagicMock()
+        for key, value in monitor_with_warnings.model_dump().items():
+            setattr(db_monitor, key, value)
+        mock_crud_monitor.get = AsyncMock(return_value=db_monitor)
+        mock_crud_monitor.update_with_tenant = AsyncMock(return_value=monitor_with_warnings)
 
         result = await validate_monitor(
             _request=Mock(),
@@ -807,10 +815,23 @@ class TestRefreshMonitorsCache:
         self,
         mock_db,
         current_user_with_tenant,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test successful cache refresh."""
-        mock_monitor_service.refresh_all_tenant_monitors = AsyncMock(return_value=5)
+        from unittest.mock import MagicMock
+
+        # Mock monitors to be refreshed
+        monitors = [MagicMock() for _ in range(5)]
+        for i, monitor in enumerate(monitors):
+            monitor.id = f"monitor-{i}"
+            monitor.tenant_id = str(current_user_with_tenant["tenant_id"])
+            monitor.active = True
+            monitor.paused = False
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = monitors
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_crud_monitor._cache_monitor = AsyncMock()
 
         result = await refresh_monitors_cache(
             _request=Mock(),
@@ -822,20 +843,24 @@ class TestRefreshMonitorsCache:
         assert "Successfully refreshed 5 monitors" in result["message"]
         assert result["tenant_id"] == str(current_user_with_tenant["tenant_id"])
 
-        mock_monitor_service.refresh_all_tenant_monitors.assert_called_once_with(
-            db=mock_db,
-            tenant_id=str(current_user_with_tenant["tenant_id"]),
-        )
+        # Verify cache methods were called
+        assert mock_crud_monitor._cache_monitor.call_count == 5
 
     @pytest.mark.asyncio
     async def test_refresh_cache_no_monitors(
         self,
         mock_db,
         current_user_with_tenant,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test cache refresh with no monitors."""
-        mock_monitor_service.refresh_all_tenant_monitors = AsyncMock(return_value=0)
+        from unittest.mock import MagicMock
+
+        # Mock no monitors found
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_crud_monitor._cache_monitor = AsyncMock()
 
         result = await refresh_monitors_cache(
             _request=Mock(),
@@ -908,11 +933,11 @@ class TestMonitorEndpointEdgeCases:
         self,
         mock_db,
         current_user_with_tenant,
-        mock_monitor_service,
+        mock_crud_monitor,
     ):
         """Test pagination with edge cases."""
         # Test with very large page number
-        mock_monitor_service.list_monitors = AsyncMock(
+        mock_crud_monitor.get_paginated = AsyncMock(
             return_value={"items": [], "total": 10, "page": 1000, "size": 50, "pages": 1}
         )
 
