@@ -7,7 +7,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
-class TestDatabaseSettings(BaseSettings):
+class DatabaseTestSettings(BaseSettings):
     """Database settings for testing with isolation."""
 
     # Use a separate test database to avoid affecting production/development data
@@ -40,7 +40,7 @@ class TestDatabaseSettings(BaseSettings):
         return f"{self.TEST_POSTGRES_ASYNC_PREFIX}{self.TEST_DATABASE_URI}"
 
 
-class TestRedisSettings(BaseSettings):
+class RedisTestSettings(BaseSettings):
     """Redis settings for testing."""
 
     TEST_REDIS_HOST: str = os.getenv("TEST_REDIS_HOST", "localhost")
@@ -56,7 +56,7 @@ class TestRedisSettings(BaseSettings):
         return f"redis://{self.TEST_REDIS_HOST}:{self.TEST_REDIS_PORT}/{self.TEST_REDIS_DB}"
 
 
-class TestSettings(TestDatabaseSettings, TestRedisSettings):
+class Config(DatabaseTestSettings, RedisTestSettings):
     """Combined test settings."""
 
     # Test environment settings
@@ -90,4 +90,4 @@ class TestSettings(TestDatabaseSettings, TestRedisSettings):
 
 
 # Singleton instance
-test_settings = TestSettings()
+test_settings = Config()

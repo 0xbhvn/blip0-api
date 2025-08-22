@@ -200,8 +200,8 @@ class TestNetworkService:
         # Mock cache miss and database hit
         network_service.crud_network.get.return_value = sample_network_db
 
-        with patch.object(network_service, "_get_cached_network_by_id") as mock_get_cached, \
-             patch.object(network_service, "_cache_network") as mock_cache:
+        with patch.object(network_service, "_get_cached_network_by_id", new_callable=AsyncMock) as mock_get_cached, \
+             patch.object(network_service, "_cache_network", new_callable=AsyncMock) as mock_cache:
             mock_get_cached.return_value = None
 
             result = await network_service.get_network(mock_db, network_id)
