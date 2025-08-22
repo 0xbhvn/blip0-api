@@ -20,6 +20,7 @@ from ...core.exceptions.http_exceptions import (
     NotFoundException,
 )
 from ...core.logger import logging
+from ...crud.crud_trigger import crud_trigger
 from ...schemas.trigger import (
     EmailTriggerBase,
     TriggerCreate,
@@ -34,7 +35,6 @@ from ...schemas.trigger import (
     TriggerValidationResult,
     WebhookTriggerBase,
 )
-from ...services.trigger_service import trigger_service
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +88,8 @@ async def list_triggers(
     # Build sort object
     sort = TriggerSort(field=sort_field, order=sort_order)
 
-    # Get paginated triggers from service
-    result = await trigger_service.get_multi(
+    # Get paginated triggers
+    result = await crud_trigger.get_paginated(
         db=db,
         page=page,
         size=size,
@@ -97,6 +97,11 @@ async def list_triggers(
         sort=sort,
         tenant_id=tenant_id,
     )
+
+    # Convert models to schemas
+    result["items"] = [
+        TriggerRead.model_validate(item) for item in result["items"]
+    ]
 
     logger.info(f"Listed {len(result['items'])} triggers for tenant {tenant_id}")
     return result
@@ -126,17 +131,17 @@ async def get_trigger(
     except ValueError:
         raise BadRequestException("Invalid trigger ID format")
 
-    # Get trigger from service
-    trigger = await trigger_service.get_trigger_by_id(
+    # Get trigger
+    db_trigger = await crud_trigger.get(
         db=db,
-        trigger_id=trigger_id,
+        id=trigger_id,
         tenant_id=tenant_id,
     )
 
-    if not trigger:
+    if not db_trigger:
         raise NotFoundException(f"Trigger {trigger_id} not found")
 
-    return trigger
+    return TriggerRead.model_validate(db_trigger)
 
 
 @router.delete("/{trigger_id}", status_code=204)
@@ -165,7 +170,7 @@ async def delete_trigger(
         raise BadRequestException("Invalid trigger ID format")
 
     # Delete the trigger
-    deleted = await trigger_service.delete_trigger(
+    deleted = await crud_trigger.delete_with_tenant(
         db=db,
         trigger_id=trigger_id,
         tenant_id=tenant_id,
@@ -202,11 +207,10 @@ async def enable_trigger(
     except ValueError:
         raise BadRequestException("Invalid trigger ID format")
 
-    # Update the trigger to set active=True
-    trigger = await trigger_service.update_trigger(
+    # Enable the trigger
+    trigger = await crud_trigger.enable_trigger(
         db=db,
         trigger_id=trigger_id,
-        trigger_in=ENABLE_TRIGGER_UPDATE,
         tenant_id=tenant_id,
     )
 
@@ -241,11 +245,10 @@ async def disable_trigger(
     except ValueError:
         raise BadRequestException("Invalid trigger ID format")
 
-    # Update the trigger to set active=False
-    trigger = await trigger_service.update_trigger(
+    # Disable the trigger
+    trigger = await crud_trigger.disable_trigger(
         db=db,
         trigger_id=trigger_id,
-        trigger_in=DISABLE_TRIGGER_UPDATE,
         tenant_id=tenant_id,
     )
 
@@ -278,7 +281,7 @@ async def create_email_trigger(
     tenant_id = current_user["tenant_id"]
 
     # Check if slug already exists for this tenant
-    existing = await trigger_service.get_trigger_by_slug(
+    existing = await crud_trigger.get_by_slug(
         db=db,
         slug=slug,
         tenant_id=tenant_id,
@@ -299,10 +302,9 @@ async def create_email_trigger(
     )
 
     try:
-        trigger = await trigger_service.create_trigger(
+        trigger = await crud_trigger.create_with_config(
             db=db,
-            trigger_in=trigger_in,
-            tenant_id=tenant_id,
+            obj_in=trigger_in,
         )
         logger.info(f"Created email trigger {trigger.id} for tenant {tenant_id}")
         return trigger
@@ -347,11 +349,12 @@ async def update_email_trigger(
         raise BadRequestException("Invalid trigger ID format")
 
     # Get existing trigger to verify it's an email trigger
-    existing_trigger = await trigger_service.get_trigger_by_id(
+    existing_db_trigger = await crud_trigger.get(
         db=db,
-        trigger_id=trigger_id,
+        id=trigger_id,
         tenant_id=tenant_id,
     )
+    existing_trigger = TriggerRead.model_validate(existing_db_trigger) if existing_db_trigger else None
 
     if not existing_trigger:
         raise NotFoundException(f"Trigger {trigger_id} not found")
@@ -361,7 +364,7 @@ async def update_email_trigger(
 
     # Check if updating slug to an existing one
     if slug and slug != existing_trigger.slug:
-        existing_slug = await trigger_service.get_trigger_by_slug(
+        existing_slug = await crud_trigger.get_by_slug(
             db=db,
             slug=slug,
             tenant_id=tenant_id,
@@ -379,10 +382,10 @@ async def update_email_trigger(
         webhook_config=None,
     )
 
-    trigger = await trigger_service.update_trigger(
+    trigger = await crud_trigger.update_with_config(
         db=db,
         trigger_id=trigger_id,
-        trigger_in=trigger_update,
+        obj_in=trigger_update,
         tenant_id=tenant_id,
     )
 
@@ -423,11 +426,12 @@ async def send_test_email_trigger(
         raise BadRequestException("Invalid trigger ID format")
 
     # Get trigger to verify it exists and is an email trigger
-    trigger = await trigger_service.get_trigger_by_id(
+    db_trigger = await crud_trigger.get(
         db=db,
-        trigger_id=trigger_id,
+        id=trigger_id,
         tenant_id=tenant_id,
     )
+    trigger = TriggerRead.model_validate(db_trigger) if db_trigger else None
 
     if not trigger:
         raise NotFoundException(f"Trigger {trigger_id} not found")
@@ -442,7 +446,7 @@ async def send_test_email_trigger(
     )
 
     try:
-        result = await trigger_service.test_trigger(
+        result = await crud_trigger.test_trigger(
             db=db,
             test_request=test_request,
         )
@@ -479,7 +483,7 @@ async def create_webhook_trigger(
     tenant_id = current_user["tenant_id"]
 
     # Check if slug already exists for this tenant
-    existing = await trigger_service.get_trigger_by_slug(
+    existing = await crud_trigger.get_by_slug(
         db=db,
         slug=slug,
         tenant_id=tenant_id,
@@ -500,10 +504,9 @@ async def create_webhook_trigger(
     )
 
     try:
-        trigger = await trigger_service.create_trigger(
+        trigger = await crud_trigger.create_with_config(
             db=db,
-            trigger_in=trigger_in,
-            tenant_id=tenant_id,
+            obj_in=trigger_in,
         )
         logger.info(f"Created webhook trigger {trigger.id} for tenant {tenant_id}")
         return trigger
@@ -548,11 +551,12 @@ async def update_webhook_trigger(
         raise BadRequestException("Invalid trigger ID format")
 
     # Get existing trigger to verify it's a webhook trigger
-    existing_trigger = await trigger_service.get_trigger_by_id(
+    existing_db_trigger = await crud_trigger.get(
         db=db,
-        trigger_id=trigger_id,
+        id=trigger_id,
         tenant_id=tenant_id,
     )
+    existing_trigger = TriggerRead.model_validate(existing_db_trigger) if existing_db_trigger else None
 
     if not existing_trigger:
         raise NotFoundException(f"Trigger {trigger_id} not found")
@@ -562,7 +566,7 @@ async def update_webhook_trigger(
 
     # Check if updating slug to an existing one
     if slug and slug != existing_trigger.slug:
-        existing_slug = await trigger_service.get_trigger_by_slug(
+        existing_slug = await crud_trigger.get_by_slug(
             db=db,
             slug=slug,
             tenant_id=tenant_id,
@@ -580,10 +584,10 @@ async def update_webhook_trigger(
         webhook_config=webhook_config,
     )
 
-    trigger = await trigger_service.update_trigger(
+    trigger = await crud_trigger.update_with_config(
         db=db,
         trigger_id=trigger_id,
-        trigger_in=trigger_update,
+        obj_in=trigger_update,
         tenant_id=tenant_id,
     )
 
@@ -624,11 +628,12 @@ async def send_test_webhook_trigger(
         raise BadRequestException("Invalid trigger ID format")
 
     # Get trigger to verify it exists and is a webhook trigger
-    trigger = await trigger_service.get_trigger_by_id(
+    db_trigger = await crud_trigger.get(
         db=db,
-        trigger_id=trigger_id,
+        id=trigger_id,
         tenant_id=tenant_id,
     )
+    trigger = TriggerRead.model_validate(db_trigger) if db_trigger else None
 
     if not trigger:
         raise NotFoundException(f"Trigger {trigger_id} not found")
@@ -643,7 +648,7 @@ async def send_test_webhook_trigger(
     )
 
     try:
-        result = await trigger_service.test_trigger(
+        result = await crud_trigger.test_trigger(
             db=db,
             test_request=test_request,
         )
@@ -684,11 +689,12 @@ async def validate_trigger(
         raise BadRequestException("Invalid trigger ID format")
 
     # Get trigger to verify it exists
-    trigger = await trigger_service.get_trigger_by_id(
+    db_trigger = await crud_trigger.get(
         db=db,
-        trigger_id=trigger_id,
+        id=trigger_id,
         tenant_id=tenant_id,
     )
+    trigger = TriggerRead.model_validate(db_trigger) if db_trigger else None
 
     if not trigger:
         raise NotFoundException(f"Trigger {trigger_id} not found")
@@ -699,7 +705,7 @@ async def validate_trigger(
         test_connection=test_connection,
     )
 
-    result = await trigger_service.validate_trigger(
+    result = await crud_trigger.validate_trigger(
         db=db,
         validation_request=validation_request,
     )

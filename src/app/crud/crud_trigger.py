@@ -15,6 +15,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.logger import logging
 from ..models.trigger import EmailTrigger, Trigger, WebhookTrigger
 from ..schemas.trigger import (
     EmailTriggerBase,
@@ -34,6 +35,8 @@ from ..schemas.trigger import (
 )
 from .base import EnhancedCRUD
 
+logger = logging.getLogger(__name__)
+
 
 class CRUDTrigger(
     EnhancedCRUD[
@@ -51,6 +54,51 @@ class CRUDTrigger(
     Enhanced CRUD operations for Trigger model with validation and testing.
     Supports both email and webhook triggers with credential management.
     """
+
+    async def get_by_slug(
+        self,
+        db: AsyncSession,
+        slug: str,
+        tenant_id: Any
+    ) -> Optional[Trigger]:
+        """
+        Get trigger by slug for a specific tenant.
+
+        Args:
+            db: Database session
+            slug: Trigger slug
+            tenant_id: Tenant ID
+
+        Returns:
+            Trigger or None
+        """
+        query = select(Trigger).where(
+            Trigger.slug == slug,
+            Trigger.tenant_id == tenant_id
+        )
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def create_with_tenant(
+        self,
+        db: AsyncSession,
+        obj_in: TriggerCreate,
+        tenant_id: Any
+    ) -> TriggerRead:
+        """
+        Create trigger with tenant isolation.
+
+        Args:
+            db: Database session
+            obj_in: Trigger creation data
+            tenant_id: Tenant ID
+
+        Returns:
+            Created trigger
+        """
+        # Ensure tenant_id is set
+        obj_in.tenant_id = tenant_id
+        return await self.create_with_config(db, obj_in)
 
     async def create_with_config(
         self,
@@ -164,6 +212,125 @@ class CRUDTrigger(
 
         await db.flush()
         return await self._get_trigger_with_config(db, trigger_id)
+
+    async def update_with_tenant(
+        self,
+        db: AsyncSession,
+        trigger_id: Any,
+        obj_in: TriggerUpdate,
+        tenant_id: Any
+    ) -> Optional[TriggerRead]:
+        """
+        Update trigger with tenant isolation.
+
+        Args:
+            db: Database session
+            trigger_id: Trigger ID
+            obj_in: Update data
+            tenant_id: Tenant ID for security
+
+        Returns:
+            Updated trigger or None
+        """
+        return await self.update_with_config(db, trigger_id, obj_in, tenant_id)
+
+    async def delete_with_tenant(
+        self,
+        db: AsyncSession,
+        trigger_id: Any,
+        tenant_id: Any,
+        is_hard_delete: bool = False
+    ) -> bool:
+        """
+        Delete trigger with tenant isolation.
+
+        Args:
+            db: Database session
+            trigger_id: Trigger ID
+            tenant_id: Tenant ID for security
+            is_hard_delete: Whether to hard delete
+
+        Returns:
+            True if deleted, False otherwise
+        """
+        # Get trigger
+        query = select(Trigger).where(
+            Trigger.id == trigger_id,
+            Trigger.tenant_id == tenant_id
+        )
+        result = await db.execute(query)
+        trigger = result.scalar_one_or_none()
+
+        if not trigger:
+            return False
+
+        if is_hard_delete:
+            # Hard delete - remove from database
+            await db.delete(trigger)
+        else:
+            # Soft delete - mark as inactive
+            trigger.active = False
+
+        await db.flush()
+        return True
+
+    async def enable_trigger(
+        self,
+        db: AsyncSession,
+        trigger_id: Any,
+        tenant_id: Any
+    ) -> Optional[TriggerRead]:
+        """
+        Enable a trigger.
+
+        Args:
+            db: Database session
+            trigger_id: Trigger ID
+            tenant_id: Tenant ID
+
+        Returns:
+            Updated trigger or None
+        """
+        update_data = TriggerUpdate(
+            active=True,
+            name=None,
+            slug=None
+        )
+        return await self.update_with_config(
+            db,
+            trigger_id,
+            update_data,
+            tenant_id
+        )
+
+    async def disable_trigger(
+        self,
+        db: AsyncSession,
+        trigger_id: Any,
+        tenant_id: Any
+    ) -> Optional[TriggerRead]:
+        """
+        Disable a trigger.
+
+        Args:
+            db: Database session
+            trigger_id: Trigger ID
+            tenant_id: Tenant ID
+
+        Returns:
+            Updated trigger or None
+        """
+        update_data = TriggerUpdate(
+            active=False,
+            name=None,
+            slug=None
+        )
+        return await self.update_with_config(
+            db,
+            trigger_id,
+            update_data,
+            tenant_id
+        )
 
     async def validate_trigger(
         self,
@@ -402,29 +569,6 @@ class CRUDTrigger(
             tenant_id
         )
 
-    async def get_by_slug(
-        self,
-        db: AsyncSession,
-        slug: str,
-        tenant_id: Any
-    ) -> Optional[Trigger]:
-        """
-        Get trigger by slug within tenant context.
-
-        Args:
-            db: Database session
-            slug: Trigger slug
-            tenant_id: Tenant ID for multi-tenant isolation
-
-        Returns:
-            Trigger if found and authorized, None otherwise
-        """
-        query = select(Trigger).where(
-            Trigger.slug == slug,
-            Trigger.tenant_id == tenant_id
-        )
-        result = await db.execute(query)
-        return result.scalar_one_or_none()
 
     async def bulk_validate(
         self,
