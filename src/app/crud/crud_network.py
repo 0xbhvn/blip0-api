@@ -1,9 +1,8 @@
 """
-Enhanced CRUD operations for network management with RPC validation.
+Enhanced CRUD operations for network management with RPC validation and Redis caching.
 """
 
 import asyncio
-import json
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -11,6 +10,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.logger import logging
+from ..core.redis_client import redis_client
 from ..models.network import Network
 from ..schemas.network import (
     NetworkCreate,
@@ -30,6 +31,8 @@ from ..schemas.network import (
 )
 from .base import EnhancedCRUD
 
+logger = logging.getLogger(__name__)
+
 
 class CRUDNetwork(
     EnhancedCRUD[
@@ -48,14 +51,15 @@ class CRUDNetwork(
     Includes RPC health checks, network validation, and caching for Rust monitor.
     """
 
-    async def create_with_validation(
+    async def create_with_caching(
         self,
         db: AsyncSession,
         obj_in: NetworkCreate,
-        validate_rpcs: bool = True
+        validate_rpcs: bool = False
     ) -> NetworkRead:
         """
-        Create network with optional RPC validation.
+        Create network with write-through caching.
+        Networks are platform-managed resources.
 
         Args:
             db: Database session
@@ -77,23 +81,28 @@ class CRUDNetwork(
                 if not test_result.is_online:
                     validation_errors[rpc["url"]] = test_result.error
 
-        # Create network
-        network_data = NetworkCreateInternal(**obj_in.model_dump())
-        network = Network(**network_data.model_dump())
+        # Create network internal object
+        network_internal = NetworkCreateInternal(**obj_in.model_dump())
+
+        # Create using parent CRUD
+        db_network = await self.create(db=db, object=network_internal)
 
         # Set validation status
         if validation_errors:
-            network.validated = False
-            network.validation_errors = validation_errors
+            db_network.validated = False
+            db_network.validation_errors = validation_errors
         else:
-            network.validated = True
-            network.last_validated_at = datetime.now(UTC)
+            db_network.validated = True
+            db_network.last_validated_at = datetime.now(UTC)
 
-        db.add(network)
         await db.flush()
-        await db.refresh(network)
+        await db.refresh(db_network)
 
-        return NetworkRead.model_validate(network)
+        # Write-through to Redis for fast access by Rust monitor
+        await self._cache_network(db_network)
+
+        logger.info(f"Created platform network {db_network.slug}")
+        return NetworkRead.model_validate(db_network)
 
     async def get_by_slug(
         self,
@@ -335,49 +344,292 @@ class CRUDNetwork(
 
         return [NetworkRead.model_validate(n) for n in networks]
 
-    async def cache_to_redis(
+    async def get_with_cache(
         self,
         db: AsyncSession,
-        redis_client: Any,
-        network_id: Any
-    ) -> None:
+        network_id: Any,
+        use_cache: bool = True,
+    ) -> Optional[NetworkRead]:
         """
-        Cache network configuration to Redis for Rust monitor.
+        Get a network by ID with cache support.
 
         Args:
             db: Database session
-            redis_client: Redis client
             network_id: Network ID
+            use_cache: Whether to try cache first
+
+        Returns:
+            Network if found
         """
-        query = select(Network).where(Network.id == network_id)
-        result = await db.execute(query)
-        network = result.scalar_one_or_none()
+        # Try cache first if enabled
+        if use_cache:
+            cached = await self._get_cached_network_by_id(str(network_id))
+            if cached:
+                logger.debug(f"Cache hit for network {network_id}")
+                return cached
 
-        if network and network.active:
-            # Cache key following schema design
-            cache_key = f"platform:networks:{network.slug}"
+        # Fallback to database
+        db_network = await self.get(db=db, id=network_id)
 
-            # Prepare network data for caching
-            network_data = {
-                "id": str(network.id),
-                "name": network.name,
-                "slug": network.slug,
-                "network_type": network.network_type,
-                "chain_id": network.chain_id,
-                "network_passphrase": network.network_passphrase,
-                "rpc_urls": network.rpc_urls,
-                "block_time_ms": network.block_time_ms,
-                "confirmation_blocks": network.confirmation_blocks,
-                "cron_schedule": network.cron_schedule,
-                "max_past_blocks": network.max_past_blocks,
-                "store_blocks": network.store_blocks,
-            }
+        if not db_network:
+            return None
 
-            await redis_client.set(
-                cache_key,
-                json.dumps(network_data, default=str),
-                ex=1800  # 30 minute TTL
+        # Refresh cache on cache miss
+        if use_cache:
+            await self._cache_network(db_network)
+
+        return NetworkRead.model_validate(db_network)
+
+    async def get_by_slug_with_cache(
+        self,
+        db: AsyncSession,
+        slug: str,
+        use_cache: bool = True,
+    ) -> Optional[NetworkRead]:
+        """
+        Get a network by slug with cache support.
+        Slug is the primary identifier used by Rust monitor.
+
+        Args:
+            db: Database session
+            slug: Network slug
+            use_cache: Whether to try cache first
+
+        Returns:
+            Network if found
+        """
+        # Try cache first if enabled
+        if use_cache:
+            cached = await self._get_cached_network_by_slug(slug)
+            if cached:
+                logger.debug(f"Cache hit for network slug {slug}")
+                return cached
+
+        # Fallback to database
+        db_network = await self.get_by_slug(db=db, slug=slug)
+
+        if not db_network:
+            return None
+
+        # Refresh cache on cache miss
+        if use_cache:
+            await self._cache_network(db_network)
+
+        return NetworkRead.model_validate(db_network)
+
+    async def update_with_cache(
+        self,
+        db: AsyncSession,
+        network_id: Any,
+        obj_in: NetworkUpdate,
+    ) -> Optional[NetworkRead]:
+        """
+        Update a network with cache invalidation.
+
+        Args:
+            db: Database session
+            network_id: Network ID
+            obj_in: Update data
+
+        Returns:
+            Updated network if found
+        """
+        # Get existing network to find slug for cache invalidation
+        existing = await self.get(db=db, id=network_id)
+        if not existing:
+            return None
+
+        old_slug = str(existing.slug) if existing and hasattr(existing, 'slug') else ""  # type: ignore[attr-defined]
+
+        # Update in PostgreSQL
+        db_network = await self.update(
+            db=db,
+            object=obj_in,
+            id=network_id
+        )
+
+        if not db_network:
+            return None
+
+        # Invalidate old cache entries
+        await self._invalidate_network_cache(old_slug, str(network_id))
+
+        # Refresh cache with new data
+        await self._cache_network(db_network)
+
+        if hasattr(db_network, 'slug'):
+            logger.info(f"Updated platform network {db_network.slug}")  # type: ignore[attr-defined]
+        else:
+            logger.info(f"Updated platform network {network_id}")
+        return NetworkRead.model_validate(db_network)
+
+    async def delete_with_cache(
+        self,
+        db: AsyncSession,
+        network_id: Any,
+        is_hard_delete: bool = False,
+    ) -> bool:
+        """
+        Delete a network with cache cleanup.
+
+        Args:
+            db: Database session
+            network_id: Network ID
+            is_hard_delete: If True, permanently delete
+
+        Returns:
+            True if deleted successfully
+        """
+        # Get network for slug before deletion
+        existing = await self.get(db=db, id=network_id)
+        if not existing:
+            return False
+
+        slug = str(existing.slug) if existing and hasattr(existing, 'slug') else ""  # type: ignore[attr-defined]
+
+        # Delete from PostgreSQL
+        deleted = False
+        try:
+            await self.delete(
+                db=db,
+                id=network_id,
+                is_hard_delete=is_hard_delete
             )
+            deleted = True
+        except Exception:
+            deleted = False
+
+        if deleted:
+            # Remove from cache
+            await self._invalidate_network_cache(slug, str(network_id))
+            logger.info(f"Deleted platform network {slug}")
+
+        return bool(deleted)
+
+    async def refresh_all_networks(
+        self,
+        db: AsyncSession
+    ) -> int:
+        """
+        Refresh all platform networks in Redis cache.
+        Used for periodic cache refresh or manual sync.
+
+        Args:
+            db: Database session
+
+        Returns:
+            Number of networks refreshed
+        """
+        # Get all networks
+        result = await self.get_multi(db=db, return_total_count=False)
+        # get_multi returns a dict with 'data' key containing list
+        networks: list[Any] = []
+        if isinstance(result, dict):
+            data = result.get("data", [])
+            if isinstance(data, list):
+                networks = data
+
+        # Clear existing cache
+        pattern = "platform:networks:*"
+        await redis_client.delete_pattern(pattern)
+        pattern = "platform:network:id:*"
+        await redis_client.delete_pattern(pattern)
+
+        # Re-cache all networks
+        count = 0
+        for network in networks:
+            if network:  # Ensure network is not None
+                await self._cache_network(network)
+                count += 1
+
+        logger.info(f"Refreshed {count} platform networks in cache")
+        return count
+
+    async def get_all_network_slugs(
+        self,
+        db: AsyncSession
+    ) -> list[str]:
+        """
+        Get all network slugs for quick lookups.
+
+        Args:
+            db: Database session
+
+        Returns:
+            List of network slugs
+        """
+        result = await self.get_multi(db=db, return_total_count=False)
+        # get_multi returns a dict with 'data' key containing list
+        networks: list[Any] = []
+        if isinstance(result, dict):
+            data = result.get("data", [])
+            if isinstance(data, list):
+                networks = data
+        return [str(network.slug) for network in networks if network and hasattr(network, 'slug')]
+
+    # Redis caching helper methods
+    async def _cache_network(self, network: Any) -> None:
+        """
+        Cache network in Redis with platform-managed key pattern.
+        Uses both ID and slug for different access patterns.
+        """
+        try:
+            # Cache by slug (primary access pattern for Rust monitor)
+            slug_key = f"platform:networks:{network.slug}"
+            network_dict = NetworkRead.model_validate(
+                network).model_dump_json()
+
+            # Cache for 1 hour (networks change infrequently)
+            await redis_client.set(slug_key, network_dict, expiration=3600)
+
+            # Also cache by ID for admin operations
+            id_key = f"platform:network:id:{network.id}"
+            await redis_client.set(id_key, network_dict, expiration=3600)
+
+        except Exception as e:
+            logger.error(f"Failed to cache network {network.slug}: {e}")
+
+    async def _get_cached_network_by_slug(self, slug: str) -> Optional[NetworkRead]:
+        """Get network from cache by slug."""
+        try:
+            import json
+            key = f"platform:networks:{slug}"
+            cached = await redis_client.get(key)
+
+            if cached:
+                if isinstance(cached, str):
+                    cached = json.loads(cached)
+                return NetworkRead.model_validate(cached)
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get cached network by slug {slug}: {e}")
+            return None
+
+    async def _get_cached_network_by_id(self, network_id: str) -> Optional[NetworkRead]:
+        """Get network from cache by ID."""
+        try:
+            import json
+            key = f"platform:network:id:{network_id}"
+            cached = await redis_client.get(key)
+
+            if cached:
+                if isinstance(cached, str):
+                    cached = json.loads(cached)
+                return NetworkRead.model_validate(cached)
+            return None
+        except Exception as e:
+            logger.error(
+                f"Failed to get cached network by ID {network_id}: {e}")
+            return None
+
+    async def _invalidate_network_cache(self, slug: str, network_id: str) -> None:
+        """Invalidate network cache entries."""
+        try:
+            slug_key = f"platform:networks:{slug}"
+            id_key = f"platform:network:id:{network_id}"
+            await redis_client.delete(slug_key, id_key)
+        except Exception as e:
+            logger.error(f"Failed to invalidate network cache {slug}: {e}")
 
     async def bulk_validate(
         self,

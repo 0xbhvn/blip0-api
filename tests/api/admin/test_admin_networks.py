@@ -3,7 +3,7 @@ Tests for admin network API endpoints.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -91,19 +91,19 @@ def sample_network_read(sample_network_id):
         validated=False,
         validation_errors=None,
         last_validated_at=None,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
 @pytest.fixture
-def mock_network_service():
-    """Mock network service."""
-    # Patch the service module import path, not the endpoint import
-    with patch("src.app.services.network_service.network_service") as mock_service:
+def mock_crud_network():
+    """Mock crud_network."""
+    # Patch the crud module import path
+    with patch("src.app.crud.crud_network.crud_network") as mock_crud:
         # Also patch it in the endpoint module to ensure both import paths are covered
-        with patch("src.app.api.admin.networks.network_service", mock_service):
-            yield mock_service
+        with patch("src.app.api.admin.networks.crud_network", mock_crud):
+            yield mock_crud
 
 
 @pytest.fixture
@@ -125,7 +125,7 @@ class TestListNetworks:
         mock_db,
         sample_admin_user,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test successful network listing with pagination."""
         # Mock service response - service returns a dict
@@ -137,7 +137,7 @@ class TestListNetworks:
             "pages": 1,
         }
 
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             return_value=mock_result
         )
 
@@ -159,14 +159,14 @@ class TestListNetworks:
 
         assert result["total"] == 1
         assert len(result["items"]) == 1
-        mock_network_service.list_networks.assert_called_once()
+        mock_crud_network.get_paginated.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_networks_with_filters(
         self,
         mock_db,
         sample_admin_user,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test network listing with filters."""
         # Mock service response - service returns a dict
@@ -178,7 +178,7 @@ class TestListNetworks:
             "pages": 0
         }
 
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             return_value=mock_result
         )
 
@@ -200,14 +200,14 @@ class TestListNetworks:
 
         assert result["total"] == 0
         assert len(result["items"]) == 0
-        mock_network_service.list_networks.assert_called_once()
+        mock_crud_network.get_paginated.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_networks_empty(
         self,
         mock_db,
         sample_admin_user,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test listing networks when database is empty."""
         # Mock service response - service returns a dict
@@ -219,7 +219,7 @@ class TestListNetworks:
             "pages": 0
         }
 
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             return_value=mock_result
         )
 
@@ -249,7 +249,7 @@ class TestListNetworks:
         mock_db,
         sample_admin_user,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test network listing with pagination."""
         # Create multiple networks for pagination
@@ -264,7 +264,7 @@ class TestListNetworks:
             "pages": 3,
         }
 
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             return_value=mock_result
         )
 
@@ -295,7 +295,7 @@ class TestListNetworks:
         mock_db,
         sample_admin_user,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test network listing with different sorting options."""
         # Mock service response - service returns a dict
@@ -307,7 +307,7 @@ class TestListNetworks:
             "pages": 1,
         }
 
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             return_value=mock_result
         )
 
@@ -330,8 +330,8 @@ class TestListNetworks:
 
         assert result["total"] == 1
         # Verify service was called with correct arguments
-        mock_network_service.list_networks.assert_called_once()
-        call_args = mock_network_service.list_networks.call_args
+        mock_crud_network.get_paginated.assert_called_once()
+        call_args = mock_crud_network.get_paginated.call_args
         assert call_args[1]['db'] == mock_db
         assert call_args[1]['page'] == 1
         assert call_args[1]['size'] == 50
@@ -351,7 +351,7 @@ class TestListNetworks:
     async def test_list_networks_non_admin(
         self,
         mock_db,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test network listing with non-admin user."""
         non_admin_user = {
@@ -371,7 +371,7 @@ class TestListNetworks:
             "pages": 0
         }
 
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             return_value=mock_result
         )
 
@@ -393,18 +393,18 @@ class TestListNetworks:
 
         # Non-admin users should still get results but potentially filtered
         assert "items" in result
-        mock_network_service.list_networks.assert_called_once()
+        mock_crud_network.get_paginated.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_list_networks_unauthorized(
         self,
         mock_db,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test network listing without authentication."""
         # This test would normally be handled at the router level
         # In unit tests, we simulate by passing a dummy user but service raises exception
-        mock_network_service.list_networks = AsyncMock(
+        mock_crud_network.get_paginated = AsyncMock(
             side_effect=Exception("Unauthorized")
         )
 
@@ -439,12 +439,12 @@ class TestCreateNetwork:
         sample_admin_user,
         sample_network_create,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
         mock_crud_tenant,
     ):
         """Test successful network creation."""
-        # Mock service response
-        mock_network_service.create_network = AsyncMock(
+        # Mock CRUD response
+        mock_crud_network.create_with_caching = AsyncMock(
             return_value=sample_network_read
         )
 
@@ -461,7 +461,7 @@ class TestCreateNetwork:
         assert result.network_type == sample_network_read.network_type
         assert result.active is True
         assert result.validated is False
-        mock_network_service.create_network.assert_called_once()
+        mock_crud_network.create_with_caching.assert_called_once()
 
 
     @pytest.mark.asyncio
@@ -470,12 +470,12 @@ class TestCreateNetwork:
         mock_db,
         sample_admin_user,
         sample_network_create,
-        mock_network_service,
+        mock_crud_network,
         mock_crud_tenant,
     ):
         """Test creating a network with duplicate slug."""
-        # Mock service to raise duplicate exception
-        mock_network_service.create_network = AsyncMock(
+        # Mock CRUD to raise duplicate exception
+        mock_crud_network.create_with_caching = AsyncMock(
             side_effect=DuplicateValueException(
                 f"Network with slug '{sample_network_create.slug}' already exists"
             )
@@ -495,7 +495,7 @@ class TestCreateNetwork:
         self,
         mock_db,
         sample_admin_user,
-        mock_network_service,
+        mock_crud_network,
         mock_crud_tenant,
     ):
         """Test creating a network with invalid network type."""
@@ -503,8 +503,8 @@ class TestCreateNetwork:
         # Try to create with invalid network type - this would be caught by Pydantic
 
         # This would normally raise a ValidationError at the schema level
-        # In a mock test, we simulate the service rejecting invalid data
-        mock_network_service.create_network = AsyncMock(
+        # In a mock test, we simulate the CRUD rejecting invalid data
+        mock_crud_network.create_with_caching = AsyncMock(
             side_effect=ValueError("Invalid network type: INVALID_TYPE")
         )
 
@@ -540,11 +540,11 @@ class TestGetNetwork:
         sample_admin_user,
         sample_network_id,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test successful network retrieval."""
-        # Mock service response
-        mock_network_service.get_network = AsyncMock(
+        # Mock CRUD response
+        mock_crud_network.get_with_cache = AsyncMock(
             return_value=sample_network_read
         )
 
@@ -558,7 +558,7 @@ class TestGetNetwork:
 
         assert result.id == sample_network_read.id
         assert result.name == sample_network_read.name
-        mock_network_service.get_network.assert_called_once_with(
+        mock_crud_network.get_with_cache.assert_called_once_with(
             db=mock_db,
             network_id=sample_network_id,
         )
@@ -570,11 +570,11 @@ class TestGetNetwork:
         mock_db,
         sample_admin_user,
         sample_network_id,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test getting a non-existent network."""
-        # Mock service to raise not found exception
-        mock_network_service.get_network = AsyncMock(
+        # Mock CRUD to raise not found exception
+        mock_crud_network.get_with_cache = AsyncMock(
             side_effect=NotFoundException("Network not found")
         )
 
@@ -598,7 +598,7 @@ class TestUpdateNetwork:
         sample_admin_user,
         sample_network_id,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test successful network update."""
         # Mock updated data
@@ -607,8 +607,8 @@ class TestUpdateNetwork:
         updated_network.description = "Updated description"
         updated_network.confirmation_blocks = 5
 
-        # Mock service response
-        mock_network_service.update_network = AsyncMock(
+        # Mock CRUD response
+        mock_crud_network.update_with_cache = AsyncMock(
             return_value=updated_network
         )
 
@@ -634,7 +634,7 @@ class TestUpdateNetwork:
         assert result.name == "Updated Test Network"
         assert result.description == "Updated description"
         assert result.confirmation_blocks == 5
-        mock_network_service.update_network.assert_called_once()
+        mock_crud_network.update_with_cache.assert_called_once()
 
 
     @pytest.mark.asyncio
@@ -643,11 +643,11 @@ class TestUpdateNetwork:
         mock_db,
         sample_admin_user,
         sample_network_id,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test updating network to duplicate slug."""
-        # Mock service to raise duplicate exception
-        mock_network_service.update_network = AsyncMock(
+        # Mock CRUD to raise duplicate exception
+        mock_crud_network.update_with_cache = AsyncMock(
             side_effect=DuplicateValueException(
                 "Network with slug 'existing-slug' already exists"
             )
@@ -684,16 +684,16 @@ class TestDeleteNetwork:
         sample_admin_user,
         sample_network_id,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test soft deleting a network."""
-        # Mock get_network for existence check in delete endpoint
-        mock_network_service.get_network = AsyncMock(
+        # Mock get_with_cache for existence check in delete endpoint
+        mock_crud_network.get_with_cache = AsyncMock(
             return_value=sample_network_read
         )
 
-        # Mock service response
-        mock_network_service.delete_network = AsyncMock(return_value=True)
+        # Mock CRUD response
+        mock_crud_network.delete_with_cache = AsyncMock(return_value=True)
 
         result = await delete_network(
             _request=Mock(),
@@ -705,7 +705,7 @@ class TestDeleteNetwork:
         )
 
         assert result is None
-        mock_network_service.delete_network.assert_called_once_with(
+        mock_crud_network.delete_with_cache.assert_called_once_with(
             db=mock_db,
             network_id=sample_network_id,
             is_hard_delete=False,
@@ -719,16 +719,16 @@ class TestDeleteNetwork:
         sample_admin_user,
         sample_network_id,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test hard deleting a network."""
-        # Mock get_network for existence check in delete endpoint
-        mock_network_service.get_network = AsyncMock(
+        # Mock get_with_cache for existence check in delete endpoint
+        mock_crud_network.get_with_cache = AsyncMock(
             return_value=sample_network_read
         )
 
-        # Mock service response
-        mock_network_service.delete_network = AsyncMock(return_value=True)
+        # Mock CRUD response
+        mock_crud_network.delete_with_cache = AsyncMock(return_value=True)
 
         result = await delete_network(
             _request=Mock(),
@@ -740,7 +740,7 @@ class TestDeleteNetwork:
         )
 
         assert result is None
-        mock_network_service.delete_network.assert_called_once_with(
+        mock_crud_network.delete_with_cache.assert_called_once_with(
             db=mock_db,
             network_id=sample_network_id,
             is_hard_delete=True,
@@ -753,11 +753,11 @@ class TestDeleteNetwork:
         mock_db,
         sample_admin_user,
         sample_network_id,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test deleting non-existent network."""
         # Mock get_network to return None (network not found)
-        mock_network_service.get_network = AsyncMock(return_value=None)
+        mock_crud_network.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Network .* not found"):
             await delete_network(
@@ -780,17 +780,27 @@ class TestValidateNetwork:
         sample_admin_user,
         sample_network_id,
         sample_network_read,
-        mock_network_service,
+        mock_crud_network,
     ):
         """Test successful network validation."""
-        # Mock get_network for existence check in validate endpoint
-        mock_network_service.get_network = AsyncMock(
+        # Mock get_with_cache for existence check in validate endpoint
+        mock_crud_network.get_with_cache = AsyncMock(
             return_value=sample_network_read
         )
 
-        # Note: validate_network doesn't actually call network_service.validate_network
-        # The endpoint returns a mock validation result directly
-        # No need to mock the service method since it doesn't exist
+        # Mock validate_network method
+        from src.app.schemas.network import NetworkValidationResult
+        mock_crud_network.validate_network = AsyncMock(
+            return_value=NetworkValidationResult(
+                network_id=uuid.UUID(sample_network_id),
+                is_valid=True,
+                errors=[],
+                warnings=[],
+                rpc_status={},
+                current_block_height=None,
+                validated_at=datetime.now(UTC),
+            )
+        )
 
         result = await validate_network(
             _request=Mock(),

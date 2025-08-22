@@ -18,6 +18,7 @@ from ...core.exceptions.http_exceptions import (
     NotFoundException,
 )
 from ...core.logger import logging
+from ...crud.crud_network import crud_network
 from ...schemas.network import (
     NetworkCreate,
     NetworkCreateAdmin,
@@ -29,7 +30,6 @@ from ...schemas.network import (
     NetworkValidationRequest,
     NetworkValidationResult,
 )
-from ...services.network_service import network_service
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +79,8 @@ async def list_networks(
     # Build sort object
     sort = NetworkSort(field=sort_field, order=sort_order)
 
-    # Get paginated networks
-    result = await network_service.list_networks(
+    # Get paginated networks using CRUD
+    result = await crud_network.get_paginated(
         db=db,
         page=page,
         size=size,
@@ -88,9 +88,12 @@ async def list_networks(
         sort=sort,
     )
 
-    # The service always returns a dict with items, total, page, size, pages
-    items = result.get("items", [])
-    logger.info(f"Returned {len(items)} networks (total={result.get('total', 0)})")
+    # Convert models to schemas
+    result["items"] = [
+        NetworkRead.model_validate(item) for item in result["items"]
+    ]
+
+    logger.info(f"Returned {len(result['items'])} networks (total={result.get('total', 0)})")
     return result
 
 
@@ -147,9 +150,9 @@ async def create_network(
 
             network_in_with_tenant = NetworkCreate(tenant_id=platform_tenant_id, **network_in.model_dump())
 
-            network = await network_service.create_network(
+            network = await crud_network.create_with_caching(
                 db=db,
-                network_in=network_in_with_tenant,
+                obj_in=network_in_with_tenant,
             )
 
             logger.info(f"Created network {network.id} ({network.slug})")
@@ -191,7 +194,7 @@ async def get_network(
     """
     logger.info(f"Admin {admin_user['id']} getting network {network_id}")
 
-    network = await network_service.get_network(
+    network = await crud_network.get_with_cache(
         db=db,
         network_id=network_id,
     )
@@ -229,10 +232,10 @@ async def update_network(
     logger.info(f"Admin {admin_user['id']} updating network {network_id}")
 
     try:
-        network = await network_service.update_network(
+        network = await crud_network.update_with_cache(
             db=db,
             network_id=network_id,
-            network_update=network_update,
+            obj_in=network_update,
         )
 
         if not network:
@@ -277,7 +280,7 @@ async def delete_network(
     logger.info(f"Admin {admin_user['id']} deleting network {network_id} (hard={hard_delete})")
 
     # Check if network exists
-    network = await network_service.get_network(db=db, network_id=network_id)
+    network = await crud_network.get_with_cache(db=db, network_id=network_id)
     if not network:
         raise NotFoundException(f"Network {network_id} not found")
 
@@ -286,7 +289,7 @@ async def delete_network(
     # TODO: Add check for monitors using this network
 
     try:
-        success = await network_service.delete_network(
+        success = await crud_network.delete_with_cache(
             db=db,
             network_id=network_id,
             is_hard_delete=hard_delete,
@@ -328,24 +331,22 @@ async def validate_network(
     logger.info(f"Admin {admin_user['id']} validating network {network_id}")
 
     # Get network
-    network = await network_service.get_network(db=db, network_id=network_id)
+    network = await crud_network.get_with_cache(db=db, network_id=network_id)
     if not network:
         raise NotFoundException(f"Network {network_id} not found")
 
     try:
         # Validate network configuration
-        # Note: validate_network method needs to be implemented in network_service
-        # For now, return a mock validation result
-        from datetime import UTC, datetime
+        if validation_request is None:
+            validation_request = NetworkValidationRequest(
+                network_id=uuid_pkg.UUID(network_id),
+                test_connection=True,
+                check_block_height=True,
+            )
 
-        result = NetworkValidationResult(
-            network_id=uuid_pkg.UUID(network_id),
-            is_valid=True,
-            errors=[],
-            warnings=[],
-            rpc_status={},
-            current_block_height=None,
-            validated_at=datetime.now(UTC),
+        result = await crud_network.validate_network(
+            db=db,
+            validation_request=validation_request
         )
 
         logger.info(f"Validated network {network_id}: valid={result.is_valid}")
