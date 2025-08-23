@@ -152,7 +152,7 @@ class TestListFilterScripts:
     async def test_list_filter_scripts_no_tenant(
         self,
         mock_db,
-        mock_crud_filter_script,
+        mock_crud_filter_script,  # noqa: ARG002
     ):
         """Test filter script listing without tenant association."""
         user_without_tenant = {
@@ -246,7 +246,7 @@ class TestCreateFilterScript:
         mock_db,
         sample_user,
         sample_filter_script_create,
-        mock_crud_filter_script,
+        mock_crud_filter_script,  # noqa: ARG002
     ):
         """Test creating a filter script for a different tenant."""
         # Modify script to have different tenant_id
@@ -290,6 +290,8 @@ class TestGetFilterScript:
             current_user=sample_user,
         )
 
+        # Type assertion for IDE type checking
+        assert isinstance(result, FilterScriptWithContent)
         assert str(result.id) == sample_filter_script_id
         assert result.name == sample_filter_script_read.name
         assert hasattr(result, 'script_content')
@@ -352,6 +354,7 @@ class TestUpdateFilterScript:
 
         update_data = FilterScriptUpdate(
             name="Updated Test Filter",
+            slug=None,
             description="Updated description",
             timeout_ms=5000,
             script_content="#!/bin/bash\necho 'Updated'",
@@ -391,7 +394,12 @@ class TestUpdateFilterScript:
             return_value=existing_script
         )
 
-        update_data = FilterScriptUpdate(slug="existing-slug")
+        update_data = FilterScriptUpdate(
+            name=None,
+            slug="existing-slug",
+            timeout_ms=None,
+            script_content=None,
+        )
 
         with pytest.raises(DuplicateValueException, match="already exists"):
             await update_filter_script(
