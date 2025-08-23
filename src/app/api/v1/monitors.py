@@ -20,6 +20,7 @@ from ...core.exceptions.http_exceptions import (
     NotFoundException,
 )
 from ...core.logger import logging
+from ...crud.crud_monitor import crud_monitor
 from ...schemas.monitor import (
     MonitorCreate,
     MonitorFilter,
@@ -29,7 +30,6 @@ from ...schemas.monitor import (
     MonitorUpdate,
     MonitorValidationResult,
 )
-from ...services.monitor_service import monitor_service
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +90,19 @@ async def list_monitors(
     sort = MonitorSort(field=sort_field, order=sort_order)
 
     # Get paginated monitors
-    result = await monitor_service.list_monitors(
+    result = await crud_monitor.get_paginated(
         db=db,
-        tenant_id=tenant_id,
         page=page,
         size=size,
         filters=filters,
         sort=sort,
+        tenant_id=tenant_id
     )
+
+    # Convert models to schemas
+    result["items"] = [
+        MonitorRead.model_validate(item) for item in result["items"]
+    ]
 
     logger.info(f"Listed {len(result['items'])} monitors for tenant {tenant_id}")
     return result
@@ -130,7 +135,7 @@ async def get_monitor(
 
     if include_triggers:
         # Get monitor with triggers (denormalized)
-        monitor_data = await monitor_service.get_monitor_with_triggers(
+        monitor_data = await crud_monitor.get_monitor_with_triggers(
             db=db,
             monitor_id=monitor_id,
             tenant_id=tenant_id,
@@ -140,14 +145,14 @@ async def get_monitor(
         return monitor_data
     else:
         # Get monitor only
-        monitor = await monitor_service.get_monitor(
+        db_monitor = await crud_monitor.get(
             db=db,
-            monitor_id=monitor_id,
-            tenant_id=tenant_id,
+            id=monitor_id,
+            tenant_id=tenant_id
         )
-        if not monitor:
+        if not db_monitor:
             raise NotFoundException(f"Monitor {monitor_id} not found")
-        return monitor
+        return MonitorRead.model_validate(db_monitor)
 
 
 @router.post("", response_model=MonitorRead, status_code=201)
@@ -173,38 +178,22 @@ async def create_monitor(
         raise ForbiddenException("Cannot create monitors for other tenants")
 
     # Check if slug already exists for this tenant
-    existing = await monitor_service.list_monitors(
+    existing_monitor = await crud_monitor.get_by_slug(
         db=db,
-        tenant_id=str(tenant_id),
-        page=1,
-        size=1,
-        filters=MonitorFilter(
-            tenant_id=tenant_id,
-            name=None,
-            slug=monitor_in.slug,
-            active=None,
-            paused=None,
-            validated=None,
-            network_slug=None,
-            has_triggers=None,
-            created_after=None,
-            created_before=None,
-            updated_after=None,
-            updated_before=None,
-        ),
+        slug=monitor_in.slug,
+        tenant_id=tenant_id
     )
 
-    if existing["total"] > 0:
+    if existing_monitor:
         raise DuplicateValueException(f"Monitor with slug '{monitor_in.slug}' already exists")
 
     # Create the monitor
     try:
-        monitor = await monitor_service.create_monitor(
+        monitor = await crud_monitor.create_with_tenant(
             db=db,
-            monitor_in=monitor_in,
+            obj_in=monitor_in,
             tenant_id=tenant_id,
         )
-        logger.info(f"Created monitor {monitor.id} for tenant {tenant_id}")
         return monitor
     except ValidationError as e:
         logger.warning(f"Monitor validation failed: {e}")
@@ -244,35 +233,20 @@ async def update_monitor(
 
     # Check if updating slug to an existing one
     if monitor_update.slug:
-        existing = await monitor_service.list_monitors(
+        existing_monitor = await crud_monitor.get_by_slug(
             db=db,
-            tenant_id=tenant_id,
-            page=1,
-            size=1,
-            filters=MonitorFilter(
-                tenant_id=uuid_pkg.UUID(tenant_id),
-                name=None,
-                slug=monitor_update.slug,
-                active=None,
-                paused=None,
-                validated=None,
-                network_slug=None,
-                has_triggers=None,
-                created_after=None,
-                created_before=None,
-                updated_after=None,
-                updated_before=None,
-            ),
+            slug=monitor_update.slug,
+            tenant_id=tenant_id
         )
 
-        if existing["total"] > 0 and str(existing["items"][0].id) != monitor_id:
+        if existing_monitor and str(existing_monitor.id) != monitor_id:
             raise DuplicateValueException(f"Monitor with slug '{monitor_update.slug}' already exists")
 
     # Update the monitor
-    monitor = await monitor_service.update_monitor(
+    monitor = await crud_monitor.update_with_tenant(
         db=db,
         monitor_id=monitor_id,
-        monitor_update=monitor_update,
+        obj_in=monitor_update,
         tenant_id=tenant_id,
     )
 
@@ -309,7 +283,7 @@ async def delete_monitor(
         raise BadRequestException("Invalid monitor ID format")
 
     # Delete the monitor
-    deleted = await monitor_service.delete_monitor(
+    deleted = await crud_monitor.delete_with_tenant(
         db=db,
         monitor_id=monitor_id,
         tenant_id=tenant_id,
@@ -346,11 +320,10 @@ async def pause_monitor(
     except ValueError:
         raise BadRequestException("Invalid monitor ID format")
 
-    # Update the monitor to set paused=True
-    monitor = await monitor_service.update_monitor(
+    # Pause the monitor
+    monitor = await crud_monitor.pause_monitor(
         db=db,
         monitor_id=monitor_id,
-        monitor_update=PAUSE_MONITOR_UPDATE,
         tenant_id=tenant_id,
     )
 
@@ -385,11 +358,10 @@ async def resume_monitor(
     except ValueError:
         raise BadRequestException("Invalid monitor ID format")
 
-    # Update the monitor to set paused=False and active=True
-    monitor = await monitor_service.update_monitor(
+    # Resume the monitor
+    monitor = await crud_monitor.resume_monitor(
         db=db,
         monitor_id=monitor_id,
-        monitor_update=RESUME_MONITOR_UPDATE,
         tenant_id=tenant_id,
     )
 
@@ -427,14 +399,16 @@ async def validate_monitor(
         raise BadRequestException("Invalid monitor ID format")
 
     # Get the monitor
-    monitor = await monitor_service.get_monitor(
+    db_monitor = await crud_monitor.get(
         db=db,
-        monitor_id=monitor_id,
-        tenant_id=tenant_id,
+        id=monitor_id,
+        tenant_id=tenant_id
     )
 
-    if not monitor:
+    if not db_monitor:
         raise NotFoundException(f"Monitor {monitor_id} not found")
+
+    monitor = MonitorRead.model_validate(db_monitor)
 
     # Perform validation
     errors = []
@@ -501,11 +475,22 @@ async def refresh_monitors_cache(
 
     tenant_id = str(current_user["tenant_id"])
 
-    # Refresh all monitors for the tenant
-    count = await monitor_service.refresh_all_tenant_monitors(
-        db=db,
-        tenant_id=tenant_id,
+    # Get all active monitors for the tenant and refresh their cache
+    from sqlalchemy import select
+
+    from ...models.monitor import Monitor
+
+    query = select(Monitor).where(
+        Monitor.tenant_id == tenant_id,
+        Monitor.active
     )
+    result = await db.execute(query)
+    monitors = result.scalars().all()
+
+    count = 0
+    for monitor in monitors:
+        await crud_monitor._cache_monitor(monitor, tenant_id)
+        count += 1
 
     logger.info(f"Refreshed {count} monitors in cache for tenant {tenant_id}")
 

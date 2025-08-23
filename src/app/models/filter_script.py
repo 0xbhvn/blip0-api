@@ -20,7 +20,7 @@ class FilterScript(Base):
     """
     FilterScript model for managing custom filter scripts used by monitors.
     Scripts are stored in the filesystem while metadata is tracked in the database.
-    Platform-managed resource shared across all tenants.
+    Tenant-managed resource for custom filtering logic.
     """
     __tablename__ = "filter_scripts"
 
@@ -30,9 +30,16 @@ class FilterScript(Base):
         unique=True
     )
 
+    # Tenant relationship
+    tenant_id: Mapped[uuid_pkg.UUID] = mapped_column(
+        nullable=False,
+        index=True,
+        comment="Tenant that owns this filter script"
+    )
+
     # Required fields (no defaults)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     language: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
@@ -119,8 +126,8 @@ class FilterScript(Base):
     # Table constraints
     __table_args__ = (
         UniqueConstraint(
-            "slug",
-            name="unique_filter_script_slug",
+            "tenant_id", "slug",
+            name="unique_filter_script_tenant_slug",
             deferrable=True,
             initially="DEFERRED"
         ),
@@ -133,7 +140,8 @@ class FilterScript(Base):
             name="check_filter_script_timeout"
         ),
         # Composite indexes for common query patterns
-        Index("idx_filter_script_active", "active"),
+        Index("idx_filter_script_tenant_active", "tenant_id", "active"),
+        Index("idx_filter_script_tenant_slug", "tenant_id", "slug"),
         Index("idx_filter_script_language_active", "language", "active"),
         {"comment": "Metadata for filter scripts stored in filesystem, used by monitors for custom filtering logic"},
     )

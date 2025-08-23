@@ -156,16 +156,9 @@ def sample_tenant_usage_stats(sample_tenant_id):
 
 
 @pytest.fixture
-def mock_tenant_service():
-    """Mock tenant service."""
-    with patch("src.app.api.v1.tenant.tenant_service") as mock_service:
-        yield mock_service
-
-
-@pytest.fixture
 def mock_crud_tenant():
-    """Mock crud_tenant."""
-    with patch("src.app.crud.crud_tenant.crud_tenant") as mock_crud:
+    """Mock tenant CRUD."""
+    with patch("src.app.api.v1.tenant.crud_tenant") as mock_crud:
         yield mock_crud
 
 
@@ -251,7 +244,7 @@ class TestUpdateCurrentTenant:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful update of current tenant settings."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
@@ -260,11 +253,11 @@ class TestUpdateCurrentTenant:
             settings={"timezone": "America/New_York"},
         )
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
         updated_tenant = TenantRead(
             **{**sample_tenant_read.model_dump(), "name": "Updated Company"}
         )
-        mock_tenant_service.update_tenant_self_service = AsyncMock(
+        mock_crud_tenant.update_tenant_self_service = AsyncMock(
             return_value=updated_tenant
         )
 
@@ -278,7 +271,7 @@ class TestUpdateCurrentTenant:
         )
 
         assert result.name == "Updated Company"
-        mock_tenant_service.update_tenant_self_service.assert_called_once_with(
+        mock_crud_tenant.update_tenant_self_service.assert_called_once_with(
             db=mock_db,
             tenant_id=tenant_id,
             update_data=update_data,
@@ -290,13 +283,13 @@ class TestUpdateCurrentTenant:
         self,
         mock_db,
         current_user_with_tenant,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update current tenant when tenant doesn't exist."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
         update_data = TenantSelfServiceUpdate(name="Updated", settings={})
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await update_current_tenant(
@@ -314,13 +307,13 @@ class TestUpdateCurrentTenant:
         mock_db,
         current_user_with_tenant,
         sample_tenant_suspended,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update current tenant when tenant is suspended."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
         update_data = TenantSelfServiceUpdate(name="Updated", settings={})
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_suspended)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_suspended)
 
         with pytest.raises(ForbiddenException, match="Cannot update suspended tenant"):
             await update_current_tenant(
@@ -338,14 +331,14 @@ class TestUpdateCurrentTenant:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update current tenant with duplicate name."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
         update_data = TenantSelfServiceUpdate(name="Existing Company", settings={})
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.update_tenant_self_service = AsyncMock(
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.update_tenant_self_service = AsyncMock(
             side_effect=IntegrityError("duplicate key", None, Exception("duplicate key error"))
         )
 
@@ -367,15 +360,15 @@ class TestUpdateCurrentTenant:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update current tenant with validation error."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
         update_data = TenantSelfServiceUpdate(name="Valid", settings={"invalid": True})
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
         # Raise a generic exception that will be caught and converted to BadRequestException
-        mock_tenant_service.update_tenant_self_service = AsyncMock(
+        mock_crud_tenant.update_tenant_self_service = AsyncMock(
             side_effect=Exception("Invalid settings: validation error")
         )
 
@@ -395,14 +388,14 @@ class TestUpdateCurrentTenant:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test update current tenant with general error."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
         update_data = TenantSelfServiceUpdate(name="Valid", settings={})
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.update_tenant_self_service = AsyncMock(
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.update_tenant_self_service = AsyncMock(
             side_effect=Exception("Database error")
         )
 
@@ -429,13 +422,13 @@ class TestGetTenantUsage:
         current_user_with_tenant,
         sample_tenant_read,
         sample_tenant_usage_stats,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful retrieval of tenant usage statistics."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_usage = AsyncMock(
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_usage = AsyncMock(
             return_value=sample_tenant_usage_stats
         )
 
@@ -451,18 +444,18 @@ class TestGetTenantUsage:
         assert result.monitors_count == 5
         assert result.monitors_remaining == 45
         assert result.monitors_usage_percent == 10.0
-        mock_tenant_service.get_tenant_usage.assert_called_once_with(mock_db, tenant_id)
+        mock_crud_tenant.get_tenant_usage.assert_called_once_with(mock_db, tenant_id)
 
     @pytest.mark.asyncio
     async def test_get_tenant_usage_not_found(
         self,
         mock_db,
         current_user_with_tenant,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant usage when tenant doesn't exist."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await get_tenant_usage(
@@ -479,11 +472,11 @@ class TestGetTenantUsage:
         mock_db,
         current_user_with_tenant,
         sample_tenant_suspended,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant usage when tenant is suspended."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_suspended)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_suspended)
 
         with pytest.raises(ForbiddenException, match="Tenant is suspended"):
             await get_tenant_usage(
@@ -500,13 +493,13 @@ class TestGetTenantUsage:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant usage when statistics not available."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_usage = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_usage = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Usage statistics not available"):
             await get_tenant_usage(
@@ -523,7 +516,7 @@ class TestGetTenantUsage:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant usage when at usage limits."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
@@ -553,8 +546,8 @@ class TestGetTenantUsage:
             calculated_at=datetime.now(UTC),
         )
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_usage = AsyncMock(return_value=usage_at_limit)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_usage = AsyncMock(return_value=usage_at_limit)
 
         result = await get_tenant_usage(
             _request=Mock(),
@@ -574,7 +567,7 @@ class TestGetTenantUsage:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant usage with zero usage."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
@@ -604,8 +597,8 @@ class TestGetTenantUsage:
             calculated_at=datetime.now(UTC),
         )
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_usage = AsyncMock(return_value=zero_usage)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_usage = AsyncMock(return_value=zero_usage)
 
         result = await get_tenant_usage(
             _request=Mock(),
@@ -629,13 +622,13 @@ class TestGetTenantLimits:
         current_user_with_tenant,
         sample_tenant_read,
         sample_tenant_limits,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test successful retrieval of tenant limits."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_limits = AsyncMock(
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_limits = AsyncMock(
             return_value=sample_tenant_limits
         )
 
@@ -650,18 +643,18 @@ class TestGetTenantLimits:
         assert result == sample_tenant_limits
         assert result.max_monitors == 50
         assert result.max_api_calls_per_hour == 10000
-        mock_tenant_service.get_tenant_limits.assert_called_once_with(mock_db, tenant_id)
+        mock_crud_tenant.get_tenant_limits.assert_called_once_with(mock_db, tenant_id)
 
     @pytest.mark.asyncio
     async def test_get_tenant_limits_not_found(
         self,
         mock_db,
         current_user_with_tenant,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant limits when tenant doesn't exist."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
-        mock_tenant_service.get_tenant = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant .* not found"):
             await get_tenant_limits(
@@ -678,11 +671,11 @@ class TestGetTenantLimits:
         mock_db,
         current_user_with_tenant,
         sample_tenant_suspended,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant limits when tenant is suspended."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_suspended)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_suspended)
 
         with pytest.raises(ForbiddenException, match="Tenant is suspended"):
             await get_tenant_limits(
@@ -699,13 +692,13 @@ class TestGetTenantLimits:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant limits when limits not configured."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_limits = AsyncMock(return_value=None)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_limits = AsyncMock(return_value=None)
 
         with pytest.raises(NotFoundException, match="Tenant limits not configured"):
             await get_tenant_limits(
@@ -722,7 +715,7 @@ class TestGetTenantLimits:
         mock_db,
         current_user_with_tenant,
         sample_tenant_read,
-        mock_tenant_service,
+        mock_crud_tenant,
     ):
         """Test get tenant limits with custom limits."""
         tenant_id = str(current_user_with_tenant["tenant_id"])
@@ -743,8 +736,8 @@ class TestGetTenantLimits:
             updated_at=datetime.now(UTC),
         )
 
-        mock_tenant_service.get_tenant = AsyncMock(return_value=sample_tenant_read)
-        mock_tenant_service.get_tenant_limits = AsyncMock(return_value=custom_limits)
+        mock_crud_tenant.get_with_cache = AsyncMock(return_value=sample_tenant_read)
+        mock_crud_tenant.get_tenant_limits = AsyncMock(return_value=custom_limits)
 
         result = await get_tenant_limits(
             _request=Mock(),

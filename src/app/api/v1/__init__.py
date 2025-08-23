@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from .filter_scripts import router as filter_scripts_router
 from .login import router as login_router
 from .logout import router as logout_router
 from .monitors import router as monitors_router
@@ -20,3 +21,4 @@ router.include_router(rate_limits_router)
 router.include_router(monitors_router)
 router.include_router(triggers_router)
 router.include_router(tenant_router)
+router.include_router(filter_scripts_router)

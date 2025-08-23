@@ -48,6 +48,7 @@ class FilterScriptBase(BaseModel):
 # Create schemas
 class FilterScriptCreate(FilterScriptBase):
     """Schema for creating a new filter script."""
+    tenant_id: uuid_pkg.UUID = Field(..., description="Tenant ID that owns this filter script")
     script_content: str = Field(..., min_length=1,
                                 description="The actual script content to save")
 
@@ -55,6 +56,7 @@ class FilterScriptCreate(FilterScriptBase):
 class FilterScriptCreateInternal(FilterScriptBase):
     """Internal schema for filter script creation."""
     script_path: str  # Required field first
+    tenant_id: uuid_pkg.UUID  # Required field
     id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4)
     active: bool = Field(default=True)
     validated: bool = Field(default=False)
@@ -123,6 +125,7 @@ class FilterScriptRead(FilterScriptBase, TimestampSchema):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid_pkg.UUID
+    tenant_id: uuid_pkg.UUID
     script_path: str
     active: bool
     validated: bool
@@ -141,6 +144,7 @@ class FilterScriptWithContent(FilterScriptRead):
 # Filter and sort schemas
 class FilterScriptFilter(BaseModel):
     """Schema for filtering filter scripts."""
+    tenant_id: Optional[uuid_pkg.UUID] = Field(None, description="Filter by tenant ID")
     name: Optional[str] = Field(None, description="Filter by name (partial match)")
     slug: Optional[str] = Field(None, description="Filter by slug (exact match)")
     language: Optional[str] = Field(None, description="Filter by language")
@@ -184,19 +188,24 @@ class FilterScriptSort(BaseModel):
 # Validation schemas
 class FilterScriptValidationRequest(BaseModel):
     """Request schema for filter script validation."""
+    script_id: uuid_pkg.UUID = Field(..., description="Filter script ID to validate")
+    test_execution: bool = Field(default=False, description="Whether to test script execution")
+    check_syntax: bool = Field(default=True, description="Whether to check script syntax")
     test_input: Optional[dict[str, Any]] = Field(
         default=None, description="Sample input JSON to test the script with")
 
 
 class FilterScriptValidationResult(BaseModel):
     """Result schema for filter script validation."""
-    valid: bool = Field(..., description="Whether the script is valid")
-    errors: Optional[list[str]] = Field(default=None, description="List of validation errors")
-    warnings: Optional[list[str]] = Field(default=None, description="List of warnings")
+    script_id: uuid_pkg.UUID = Field(..., description="Filter script ID that was validated")
+    is_valid: bool = Field(..., description="Whether the script is valid")
+    errors: list[str] = Field(default_factory=list, description="List of validation errors")
+    warnings: list[str] = Field(default_factory=list, description="List of warnings")
     test_output: Optional[str] = Field(
         default=None, description="Output from test execution if test_input was provided")
-    execution_time_ms: Optional[int] = Field(
-        default=None, description="Execution time in milliseconds if test was run")
+    execution_time_ms: int = Field(
+        default=0, description="Execution time in milliseconds if test was run")
+    validated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 # Pagination schemas
