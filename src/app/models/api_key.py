@@ -47,7 +47,7 @@ class APIKey(Base):
         nullable=False,
         comment="Last 4 characters of the key for identification"
     )
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[uuid_pkg.UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"),
         nullable=False
     )
