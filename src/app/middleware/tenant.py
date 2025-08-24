@@ -118,7 +118,7 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
     async def _audit_tenant_switch(
         self,
         request: Request,
-        user_id: int,
+        user_id: uuid.UUID,
         original_tenant_id: Optional[uuid.UUID],
         target_tenant_id: uuid.UUID
     ) -> None:
@@ -128,7 +128,7 @@ class TenantIsolationMiddleware(BaseHTTPMiddleware):
         ----------
         request : Request
             The incoming request.
-        user_id : int
+        user_id : uuid.UUID
             The superuser's ID.
         original_tenant_id : Optional[uuid.UUID]
             The user's original tenant ID.

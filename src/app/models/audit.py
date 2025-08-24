@@ -29,7 +29,7 @@ class UserAuditLog(Base):
     __tablename__ = "user_audit_logs"
 
     # Required fields first (no defaults)
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[uuid_pkg.UUID] = mapped_column(
         ForeignKey("user.id"),
         nullable=False,
         index=True,

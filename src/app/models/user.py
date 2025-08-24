@@ -16,8 +16,8 @@ class User(Base):
     __tablename__ = "user"
 
     # Primary key with init=False (doesn't affect dataclass ordering)
-    id: Mapped[int] = mapped_column(
-        "id", autoincrement=True, nullable=False, unique=True, primary_key=True, init=False)
+    id: Mapped[uuid_pkg.UUID] = mapped_column(
+        "id", nullable=False, unique=True, primary_key=True, init=False, default_factory=uuid_pkg.uuid4)
 
     # Required fields (no defaults, must come first)
     name: Mapped[str] = mapped_column(String(30))

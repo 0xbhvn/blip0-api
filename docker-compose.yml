@@ -20,6 +20,7 @@ services:
       - redis
     volumes:
       - ./src/app:/code/app
+      - ./src/scripts:/code/src/scripts
       - ./src/.env:/code/.env
 
   worker:
@@ -34,6 +35,7 @@ services:
       - redis
     volumes:
       - ./src/app:/code/app
+      - ./src/scripts:/code/src/scripts
       - ./src/.env:/code/.env
 
   db:
@@ -43,17 +45,19 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     # -------- replace with comment to run migrations with docker --------
-    expose:
-      - "5432"
-    # ports:
-    #  - 5432:5432
+    # expose:
+    #   - "5432"
+    ports:
+      - 5432:5432
 
   redis:
     image: redis:alpine
     volumes:
       - redis-data:/data
-    expose:
-      - "6379"
+    # expose:
+    #   - "6379"
+    ports:
+      - 6379:6379
 
   #-------- uncomment to run with pgadmin --------
   # pgadmin:

@@ -12,7 +12,7 @@ from src.app.main import app
 def admin_user():
     """Mock admin user for authentication."""
     return {
-        "id": 1,
+        "id": "11111111-1111-1111-1111-111111111111",
         "username": "admin",
         "email": "admin@test.com",
         "name": "Admin User",
@@ -25,7 +25,7 @@ def admin_user():
 def normal_user():
     """Mock normal user for authentication."""
     return {
-        "id": 2,
+        "id": "22222222-2222-2222-2222-222222222222",
         "username": "user",
         "email": "user@test.com",
         "name": "Normal User",

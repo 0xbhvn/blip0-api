@@ -55,7 +55,7 @@ class APIKeyRead(APIKeyBase):
     id: uuid.UUID
     prefix: str
     last_four: str
-    user_id: int
+    user_id: uuid.UUID
     tenant_id: uuid.UUID
     is_active: bool
     last_used_at: Optional[datetime]
@@ -79,7 +79,7 @@ class APIKeyValidation(BaseModel):
     """Schema for API key validation response."""
 
     valid: bool
-    user_id: Optional[int] = None
+    user_id: Optional[uuid.UUID] = None
     tenant_id: Optional[uuid.UUID] = None
     scopes: Optional[list[str]] = None
     expires_at: Optional[datetime] = None
